@@ -5,7 +5,7 @@ set -e
 echo "🚀 Applying Terraform configuration..."
 echo "======================================"
 
-cd ../infrastructure/terraform
+cd infrastructure/terraform
 
 # Plan and apply
 terraform plan -out=tfplan

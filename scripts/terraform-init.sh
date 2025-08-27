@@ -13,7 +13,7 @@ echo "AWS Account ID: $AWS_ACCOUNT_ID"
 echo "AWS Region: $AWS_REGION"
 
 # Create terraform.tfvars file in the terraform directory
-cat > /infrastructure/terraform/terraform.tfvars << EOF
+cat > infrastructure/terraform/terraform.tfvars << EOF
 aws_region     = "$AWS_REGION"
 environment    = "dev"
 aws_account_id = "$AWS_ACCOUNT_ID"
