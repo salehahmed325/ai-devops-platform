@@ -17,4 +17,4 @@ terraform plan
 terraform apply
 
 # Destroy infrastructure (be careful!)
-terraform destroy
+terraform destroy# Testing CI/CD Pipeline
