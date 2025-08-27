@@ -17,6 +17,7 @@ crash.*.log
 
 # Exclude all .tfplan files
 *.tfplan
+tfplan
 
 # Ignore override files
 *_override.tf
