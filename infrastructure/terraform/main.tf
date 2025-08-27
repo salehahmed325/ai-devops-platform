@@ -44,15 +44,17 @@ module "ecr" {
   project_name = var.project_name
   environment  = var.environment
   repositories = ["edge-agent", "central-brain"]
+  tags         = local.common_tags
 }
 
 # S3 Bucket for AI Models
 module "s3_models" {
   source = "./modules/s3"
 
-  bucket_name = "ai-devops-platform-models-${local.aws_account_id}"
-  environment = var.environment
+  bucket_name  = "ai-devops-platform-models-${local.aws_account_id}"
   project_name = var.project_name
+  environment  = var.environment
+  tags         = local.common_tags
 }
 
 # IAM Roles
@@ -63,6 +65,7 @@ module "iam" {
   environment     = var.environment
   aws_account_id  = local.aws_account_id
   s3_model_bucket = module.s3_models.bucket_name
+  tags            = local.common_tags
 }
 
 # CloudWatch Log Group

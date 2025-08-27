@@ -8,11 +8,10 @@ terraform {
     }
   }
 
+  # Partial configuration - values will be provided during init
   backend "s3" {
-    # This will be configured later after the S3 bucket is created
-    bucket = "ai-devops-platform-tfstate-${var.aws_account_id}"
     key    = "terraform.tfstate"
-    region = var.aws_region
+    encrypt = true
   }
 }
 
@@ -21,7 +20,7 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Project     = "ai-devops-platform"
+      Project     = var.project_name
       Environment = var.environment
       ManagedBy   = "terraform"
     }
