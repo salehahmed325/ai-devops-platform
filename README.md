@@ -18,3 +18,4 @@ terraform apply
 
 # Destroy infrastructure (be careful!)
 terraform destroy# Testing CI/CD Pipeline
+# Testing CI/CD Pipeline
