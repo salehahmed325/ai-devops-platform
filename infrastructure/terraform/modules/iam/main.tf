@@ -77,6 +77,14 @@ resource "aws_iam_policy" "ai_devops_policy" {
   })
 
   tags = var.tags
+
+  lifecycle {
+    ignore_changes = [
+      # Ignore changes to the policy document since it's managed externally
+      policy
+    ]
+  }
+
 }
 
 # Attach custom policy to ECS role
