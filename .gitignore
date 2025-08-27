@@ -1,14 +1,29 @@
 # Terraform files
+# Terraform
 **/.terraform/
 *.tfstate
 *.tfstate.*
 *.tfvars
 .terraform.lock.hcl
 terraform.tfstate.backup
-terraform.rc
 
-# Provider binaries (VERY large files - this caused your error)
+# Provider binaries - these are VERY large
 **/terraform-provider-*
+**/.terraform/providers/**
+
+# Crash log files
+crash.log
+crash.*.log
+
+# Exclude all .tfplan files
+*.tfplan
+
+# Ignore override files
+*_override.tf
+*_override.tf.json
+
+# Include tfplan files to ignore local plan files
+.tfplan/
 
 # Python
 __pycache__/
