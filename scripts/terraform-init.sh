@@ -1,4 +1,3 @@
-# scripts/terraform-init.sh
 #!/bin/bash
 set -e
 
@@ -12,7 +11,7 @@ AWS_REGION="us-east-1"
 echo "AWS Account ID: $AWS_ACCOUNT_ID"
 echo "AWS Region: $AWS_REGION"
 
-# Create terraform.tfvars file in the terraform directory
+# Create terraform.tfvars file
 cat > infrastructure/terraform/terraform.tfvars << EOF
 aws_region     = "$AWS_REGION"
 environment    = "dev"
@@ -22,9 +21,11 @@ EOF
 
 echo "✅ Created terraform.tfvars file"
 
-# Initialize Terraform
+# Initialize Terraform with backend configuration
 cd infrastructure/terraform
-terraform init
+terraform init \
+  -backend-config="bucket=ai-devops-platform-tfstate-$AWS_ACCOUNT_ID" \
+  -backend-config="region=$AWS_REGION"
 
 echo ""
 echo "✅ Terraform initialized successfully!"

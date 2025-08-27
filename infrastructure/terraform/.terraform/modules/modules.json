@@ -1,1 +1,0 @@
-{"Modules":[{"Key":"","Source":"","Dir":"."},{"Key":"ecr","Source":"./modules/ecr","Dir":"modules/ecr"},{"Key":"iam","Source":"./modules/iam","Dir":"modules/iam"},{"Key":"s3_models","Source":"./modules/s3","Dir":"modules/s3"}]}
