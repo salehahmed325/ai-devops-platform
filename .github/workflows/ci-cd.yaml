@@ -1,0 +1,99 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+  PROJECT_NAME: ai-devops-platform
+
+jobs:
+  test:
+    name: Test and Lint
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        cd edge-agent
+        pip install -r src/requirements.txt
+
+    - name: Run linting
+      run: |
+        pip install black flake8
+        black --check edge-agent/src/
+        flake8 edge-agent/src/
+
+    - name: Verify Helm chart
+      run: |
+        helm lint charts/edge-agent/
+
+  build-edge-agent:
+    name: Build and Push Edge Agent
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Build Edge Agent Docker image
+      run: |
+        cd edge-agent
+        docker build -t $ECR_REGISTRY/edge-agent:${{ github.sha }} .
+
+    - name: Push Edge Agent to ECR
+      run: |
+        docker push $ECR_REGISTRY/edge-agent:${{ github.sha }}
+        echo "EDGE_AGENT_IMAGE=$ECR_REGISTRY/edge-agent:${{ github.sha }}" >> $GITHUB_ENV
+
+    - name: Update Helm chart values
+      run: |
+        # Update the image tag in values.yaml
+        sed -i "s|repository:.*|repository: $ECR_REGISTRY/edge-agent|" charts/edge-agent/values.yaml
+        sed -i "s|tag:.*|tag: ${{ github.sha }}|" charts/edge-agent/values.yaml
+        
+        # Update Chart version
+        sed -i "s/version: .*/version: 0.1.${{ github.run_number }}/" charts/edge-agent/Chart.yaml
+
+    - name: Package Helm chart
+      run: |
+        helm package charts/edge-agent -d ./packaged-charts/
+
+    - name: Upload Helm chart artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: edge-agent-helm-chart
+        path: ./packaged-charts/*.tgz
+
+    - name: Update repository with new chart version
+      run: |
+        git config --global user.name 'github-actions[bot]'
+        git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+        git add charts/edge-agent/Chart.yaml charts/edge-agent/values.yaml
+        git commit -m "CI: Update chart to version 0.1.${{ github.run_number }}"
+        git push
