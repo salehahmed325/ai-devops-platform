@@ -13,7 +13,7 @@ class PrometheusClient:
         """Get metrics from Prometheus"""
         try:
             async with self.session.get(
-                f"{self.prometheus_url}/api/v1/query"
+                f"{self.prometheus_url}/api/v1/query"  # This is correct if PROMETHEUS_URL=http://192.168.101.17:9090
             ) as response:
                 if response.status == 200:
                     data = await response.json()
