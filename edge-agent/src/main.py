@@ -10,18 +10,21 @@ from prometheus_client import PrometheusClient
 from kubernetes_client import KubernetesClient
 
 # Configuration
-CLUSTER_ID = os.getenv('CLUSTER_ID')
-CENTRAL_API_URL = os.getenv('CENTRAL_API_URL')
-API_KEY = os.getenv('API_KEY')
-PROMETHEUS_URL = os.getenv('PROMETHEUS_URL', 'http://prometheus-operated.monitoring.svc:9090')
-LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
+CLUSTER_ID = os.getenv("CLUSTER_ID")
+CENTRAL_API_URL = os.getenv("CENTRAL_API_URL")
+API_KEY = os.getenv("API_KEY")
+PROMETHEUS_URL = os.getenv(
+    "PROMETHEUS_URL", "http://prometheus-operated.monitoring.svc:9090"
+)
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
 # Setup logging
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
+
 
 class EdgeAgent:
     def __init__(self):
@@ -49,43 +52,44 @@ class EdgeAgent:
     async def run_loop(self):
         """Main collection loop"""
         logger.info(f"Starting Edge Agent for cluster {CLUSTER_ID}")
-        
+
         while True:
             try:
                 # Collect data
                 metrics = await self.collect_metrics()
                 k8s_state = await self.kubernetes.get_cluster_state()
-                
+
                 # Prepare payload
                 payload = {
-                    'cluster_id': CLUSTER_ID,
-                    'metrics': metrics,
-                    'kubernetes_state': k8s_state,
-                    'timestamp': asyncio.get_event_loop().time()
+                    "cluster_id": CLUSTER_ID,
+                    "metrics": metrics,
+                    "kubernetes_state": k8s_state,
+                    "timestamp": asyncio.get_event_loop().time(),
                 }
-                
+
                 # Send to central brain
                 await self.send_to_central_brain(payload)
-                
+
                 # Wait for next collection
                 await asyncio.sleep(300)  # 5 minutes
-                
+
             except Exception as e:
                 logger.error(f"Error in main loop: {e}")
                 await asyncio.sleep(60)  # Wait before retrying
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     agent = EdgeAgent()
     app.state.agent = agent
-    
+
     # Start the collection loop as a background task
     task = asyncio.create_task(agent.run_loop())
     app.state.background_task = task
-    
+
     yield
-    
+
     # Shutdown
     task.cancel()
     try:
@@ -93,7 +97,9 @@ async def lifespan(app: FastAPI):
     except asyncio.CancelledError:
         pass
 
+
 app = FastAPI(title="AI DevOps Edge Agent", lifespan=lifespan)
+
 
 @app.get("/health")
 async def health_check():
@@ -101,22 +107,16 @@ async def health_check():
         return {"status": "healthy"}
     raise HTTPException(status_code=503, detail="Agent not healthy")
 
+
 @app.get("/metrics")
 async def metrics():
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
+
 @app.get("/info")
 async def info():
-    return {
-        "cluster_id": CLUSTER_ID,
-        "version": "0.1.0",
-        "status": "running"
-    }
+    return {"cluster_id": CLUSTER_ID, "version": "0.1.0", "status": "running"}
+
 
 if __name__ == "__main__":
-    uvicorn.run(
-        app,
-        host="0.0.0.0",
-        port=8080,
-        log_level=LOG_LEVEL.lower()
-    )
+    uvicorn.run(app, host="0.0.0.0", port=8080, log_level=LOG_LEVEL.lower())
