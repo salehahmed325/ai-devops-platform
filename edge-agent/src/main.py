@@ -3,6 +3,7 @@ import logging
 import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import Response  # ← ADD THIS IMPORT
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 import uvicorn
 
