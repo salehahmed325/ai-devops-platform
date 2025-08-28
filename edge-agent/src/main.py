@@ -7,8 +7,8 @@ from fastapi.responses import Response  # ← ADD THIS IMPORT
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 import uvicorn
 
-from prometheus_client import PrometheusClient
-from kubernetes_client import KubernetesClient
+from prometheus_helper import PrometheusClient
+from k8s_client import KubernetesClient
 
 # Configuration
 CLUSTER_ID = os.getenv("CLUSTER_ID")
