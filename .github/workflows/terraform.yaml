@@ -5,6 +5,7 @@ on:
     branches: [ main ]
     paths:
       - 'infrastructure/terraform/**'
+      - '.github/workflows/terraform.yml'
   pull_request:
     branches: [ main ]
     paths:
@@ -16,7 +17,6 @@ env:
 
 jobs:
   terraform:
-    name: Terraform
     runs-on: ubuntu-latest
     environment: dev
 
@@ -39,7 +39,7 @@ jobs:
     - name: Terraform Init
       run: |
         cd infrastructure/terraform
-        terraform init
+        terraform init -input=false
 
     - name: Terraform Format
       run: |
@@ -52,15 +52,6 @@ jobs:
         terraform validate
 
     - name: Terraform Plan
-      if: github.event_name == 'pull_request'
       run: |
         cd infrastructure/terraform
-        terraform plan -input=false
-
-    - name: Terraform Apply
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-      run: |
-        cd infrastructure/terraform
-        terraform apply -auto-approve -input=false
-      env:
-        TF_CLI_ARGS_apply: -auto-approve -input=false
+        terraform plan -input=false -out=tfplan
