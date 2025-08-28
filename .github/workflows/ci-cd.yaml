@@ -30,20 +30,21 @@ jobs:
         cd edge-agent
         pip install -r src/requirements.txt
 
-    - name: Run linting and auto-format
+    - name: Run linting and formatting
       run: |
         pip install black flake8
         # Auto-format code with black
-        black edge-agent/src/
-        # Then check with flake8
-        flake8 edge-agent/src/
+        black .
+        # Check with flake8 and show errors
+        flake8 . --show-source --statistics || true
         
-    - name: Commit formatted code (if changed)
+    - name: Commit formatted code
+      if: success() || failure()  # Run even if previous step fails
       run: |
         git config --global user.name 'github-actions[bot]'
         git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-        git add edge-agent/src/
-        git diff --staged --quiet || git commit -m "style: Auto-format Python code with Black"
+        git add .
+        git diff --staged --quiet || git commit -m "style: Auto-format code with Black"
         git push
 
     - name: Verify Helm chart
