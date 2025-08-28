@@ -12,7 +12,9 @@ class PrometheusClient:
     async def get_metrics(self):
         """Get metrics from Prometheus"""
         try:
-            async with self.session.get(f"{self.prometheus_url}/api/v1/query") as response:
+            async with self.session.get(
+                f"{self.prometheus_url}/api/v1/query"
+            ) as response:
                 if response.status == 200:
                     data = await response.json()
                     return data.get("data", {}).get("result", [])
