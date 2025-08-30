@@ -1,14 +1,17 @@
+# Put your custom imports FIRST
+from prometheus_helper import PrometheusClient
+from k8s_client import KubernetesClient
+
+# Then import third-party packages
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import Response
+import uvicorn
 import os
 import logging
 import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import Response  # ← ADD THIS IMPORT
-from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
-import uvicorn
 
-from prometheus_helper import PrometheusClient
-from k8s_client import KubernetesClient
 
 # Configuration
 CLUSTER_ID = os.getenv("CLUSTER_ID")
