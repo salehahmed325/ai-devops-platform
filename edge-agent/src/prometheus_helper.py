@@ -12,8 +12,11 @@ class PrometheusClient:
     async def get_metrics(self):
         """Get metrics from Prometheus"""
         try:
+            # Use a default query to get basic metrics
+            params = {'query': 'up'}
             async with self.session.get(
-                f"{self.prometheus_url}"  # This is correct if PROMETHEUS_URL=http://192.168.101.17:9090
+                f"{self.prometheus_url}/api/v1/query",
+                params=params
             ) as response:
                 if response.status == 200:
                     data = await response.json()
