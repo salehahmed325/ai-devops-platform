@@ -14,10 +14,7 @@ class PrometheusClient:
         """Get metrics from Prometheus"""
         try:
             query_url = urljoin(self.prometheus_url, "api/v1/query")
-            async with self.session.get(
-                query_url,
-                params={'query': 'up'}
-            ) as response:
+            async with self.session.get(query_url, params={"query": "up"}) as response:
                 if response.status == 200:
                     data = await response.json()
                     return data.get("data", {}).get("result", [])
