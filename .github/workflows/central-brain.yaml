@@ -1,0 +1,66 @@
+name: Build Central Brain
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'central-brain/**'
+      - '.github/workflows/central-brain.yaml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'central-brain/**'
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+
+jobs:
+  build-and-push-central-brain:
+    name: Build and Push Central Brain
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies and tools
+      run: |
+        pip install black flake8
+        if [ -f central-brain/src/requirements.txt ]; then pip install -r central-brain/src/requirements.txt; fi
+
+    - name: Lint and Format Check
+      run: |
+        black --check central-brain/
+        flake8 central-brain/
+
+    - name: Configure AWS credentials
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Login to Amazon ECR
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Build and Push to ECR
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      run: |
+        docker build -t $ECR_REGISTRY/central-brain:${{ github.sha }} ./central-brain
+        docker push $ECR_REGISTRY/central-brain:${{ github.sha }}
+
+    - name: Push to Docker Hub
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      run: |
+        docker login -u ${{ secrets.DOCKERHUB_USERNAME }} -p ${{ secrets.DOCKERHUB_TOKEN }}
+        docker tag $ECR_REGISTRY/central-brain:${{ github.sha }} ${{ secrets.DOCKERHUB_USERNAME }}/central-brain:${{ github.sha }}
+        docker tag $ECR_REGISTRY/central-brain:${{ github.sha }} ${{ secrets.DOCKERHUB_USERNAME }}/central-brain:latest
+        docker push ${{ secrets.DOCKERHUB_USERNAME }}/central-brain --all-tags
