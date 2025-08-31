@@ -17,3 +17,8 @@ output "cloudwatch_log_group" {
   description = "CloudWatch log group name"
   value       = aws_cloudwatch_log_group.main.name
 }
+
+output "central_brain_url" {
+  description = "The public URL of the Central Brain service"
+  value       = "http://${module.ecs.load_balancer_dns_name}"
+}
