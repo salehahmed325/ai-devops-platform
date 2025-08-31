@@ -6,15 +6,15 @@ logger = logging.getLogger(__name__)
 
 class PrometheusClient:
     def __init__(self, prometheus_url):
-        self.prometheus_url = prometheus_url
+        self.prometheus_url = prometheus_url.rstrip('/')
         self.session = aiohttp.ClientSession()
 
     async def get_metrics(self):
         """Get metrics from Prometheus"""
         try:
-            # Use the URL directly without appending query parameters
+            query_url = f"{self.prometheus_url}/api/v1/query"
             async with self.session.get(
-                self.prometheus_url,  # Use the URL as-is
+                query_url,
                 params={'query': 'up'}
             ) as response:
                 if response.status == 200:
