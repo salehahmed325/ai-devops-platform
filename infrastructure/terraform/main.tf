@@ -110,3 +110,39 @@ module "ecs" {
     container_image             = "680763994293.dkr.ecr.us-east-1.amazonaws.com/central-brain:latest" # placeholder
     ecs_task_execution_role_arn = module.iam.ecs_task_execution_role_arn
 }
+
+# --- VPC Endpoints for ECR ---
+
+# ECR API Endpoint
+resource "aws_vpc_endpoint" "ecr_api" {
+  vpc_id            = data.aws_vpc.default.id
+  service_name      = "com.amazonaws.${var.aws_region}.ecr.api"
+  vpc_endpoint_type = "Interface"
+  private_dns_enabled = true
+  subnet_ids        = data.aws_subnets.all.ids
+  security_group_ids = [
+    module.ecs.ecs_service_security_group_id
+  ]
+  tags = local.common_tags
+}
+
+# ECR Docker Registry Endpoint
+resource "aws_vpc_endpoint" "ecr_dkr" {
+  vpc_id            = data.aws_vpc.default.id
+  service_name      = "com.amazonaws.${var.aws_region}.ecr.dkr"
+  vpc_endpoint_type = "Interface"
+  private_dns_enabled = true
+  subnet_ids        = data.aws_subnets.all.ids
+  security_group_ids = [
+    module.ecs.ecs_service_security_group_id
+  ]
+  tags = local.common_tags
+}
+
+# S3 Gateway Endpoint (for ECR image layers)
+resource "aws_vpc_endpoint" "s3" {
+  vpc_id       = data.aws_vpc.default.id
+  service_name = "com.amazonaws.${var.aws_region}.s3"
+  vpc_endpoint_type = "Gateway"
+  tags = local.common_tags
+}
