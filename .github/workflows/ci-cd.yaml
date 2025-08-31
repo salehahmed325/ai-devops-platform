@@ -3,8 +3,16 @@ name: CI/CD Pipeline
 on:
   push:
     branches: [ main, develop ]
+    paths:
+      - 'edge-agent/**'
+      - 'central-brain/**'
+      - '.github/workflows/ci-cd.yaml'
   pull_request:
     branches: [ main ]
+    paths:
+      - 'edge-agent/**'
+      - 'central-brain/**'
+      - '.github/workflows/ci-cd.yaml'
 
 env:
   AWS_REGION: us-east-1
@@ -12,10 +20,9 @@ env:
   PROJECT_NAME: ai-devops-platform
 
 jobs:
-  test:
+  test-and-lint:
     name: Test and Lint
     runs-on: ubuntu-latest
-    
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -25,18 +32,17 @@ jobs:
       with:
         python-version: '3.11'
 
-    - name: Install dependencies
-      run: |
-        cd edge-agent
-        pip install -r src/requirements.txt
-
-    - name: Run linting and formatting
+    - name: Install all dependencies
       run: |
         pip install black flake8
-        # Auto-format code with black
-        black .
-        # Check with flake8 and show errors
-        flake8 . --show-source --statistics || true
+        if [ -f edge-agent/src/requirements.txt ]; then pip install -r edge-agent/src/requirements.txt; fi
+        if [ -f central-brain/src/requirements.txt ]; then pip install -r central-brain/src/requirements.txt; fi
+
+    - name: Lint and Format Check
+      run: |
+        echo "Linting and formatting..."
+        black --check .
+        flake8 .
 
     - name: Verify Helm chart
       run: |
@@ -44,10 +50,9 @@ jobs:
 
   build-edge-agent:
     name: Build and Push Edge Agent
-    needs: test
+    needs: test-and-lint
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(join(github.event.commits.*.modified, github.event.commits.*.added, ''), 'edge-agent/')
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -63,30 +68,46 @@ jobs:
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v2
 
-    - name: Build Edge Agent Docker image
+    - name: Build and Push to ECR
       run: |
-        cd edge-agent
-        docker build -t $ECR_REGISTRY/edge-agent:${{ github.sha }} .
-
-    - name: Push Edge Agent to ECR
-      run: |
+        docker build -t $ECR_REGISTRY/edge-agent:${{ github.sha }} ./edge-agent
         docker push $ECR_REGISTRY/edge-agent:${{ github.sha }}
-        echo "EDGE_AGENT_IMAGE=$ECR_REGISTRY/edge-agent:${{ github.sha }}" >> $GITHUB_ENV
 
     - name: Push to Docker Hub
       run: |
         docker login -u ${{ secrets.DOCKERHUB_USERNAME }} -p ${{ secrets.DOCKERHUB_TOKEN }}
         docker tag $ECR_REGISTRY/edge-agent:${{ github.sha }} ${{ secrets.DOCKERHUB_USERNAME }}/edge-agent:${{ github.sha }}
         docker tag $ECR_REGISTRY/edge-agent:${{ github.sha }} ${{ secrets.DOCKERHUB_USERNAME }}/edge-agent:latest
-        docker push ${{ secrets.DOCKERHUB_USERNAME }}/edge-agent:${{ github.sha }}
-        docker push ${{ secrets.DOCKERHUB_USERNAME }}/edge-agent:latest
+        docker push ${{ secrets.DOCKERHUB_USERNAME }}/edge-agent --all-tags
 
-    - name: Package Helm chart
-      run: |
-        helm package charts/edge-agent -d ./packaged-charts/
+  build-central-brain:
+    name: Build and Push Central Brain
+    needs: test-and-lint
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(join(github.event.commits.*.modified, github.event.commits.*.added, ''), 'central-brain/')
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-    - name: Upload Helm chart artifact
-      uses: actions/upload-artifact@v4
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
       with:
-        name: edge-agent-helm-chart
-        path: ./packaged-charts/*.tgz
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Build and Push to ECR
+      run: |
+        docker build -t $ECR_REGISTRY/central-brain:${{ github.sha }} ./central-brain
+        docker push $ECR_REGISTRY/central-brain:${{ github.sha }}
+
+    - name: Push to Docker Hub
+      run: |
+        docker login -u ${{ secrets.DOCKERHUB_USERNAME }} -p ${{ secrets.DOCKERHUB_TOKEN }}
+        docker tag $ECR_REGISTRY/central-brain:${{ github.sha }} ${{ secrets.DOCKERHUB_USERNAME }}/central-brain:${{ github.sha }}
+        docker tag $ECR_REGISTRY/central-brain:${{ github.sha }} ${{ secrets.DOCKERHUB_USERNAME }}/central-brain:latest
+        docker push ${{ secrets.DOCKERHUB_USERNAME }}/central-brain --all-tags
