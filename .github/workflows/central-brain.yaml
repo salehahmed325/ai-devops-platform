@@ -55,7 +55,21 @@ jobs:
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       run: |
         docker build -t $ECR_REGISTRY/central-brain:${{ github.sha }} ./central-brain
-        docker push $ECR_REGISTRY/central-brain:${{ github.sha }}
+        docker tag $ECR_REGISTRY/central-brain:${{ github.sha }} $ECR_REGISTRY/central-brain:latest
+        docker push $ECR_REGISTRY/central-brain --all-tags
+
+    - name: Save Image Tag as Artifact
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      run: |
+        mkdir -p artifacts
+        echo ${{ github.sha }} > artifacts/image_tag.txt
+
+    - name: Upload Image Tag Artifact
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: actions/upload-artifact@v4
+      with:
+        name: central-brain-image-tag
+        path: artifacts/image_tag.txt
 
     - name: Push to Docker Hub
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'

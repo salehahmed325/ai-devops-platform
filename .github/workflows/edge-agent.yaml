@@ -55,7 +55,8 @@ jobs:
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       run: |
         docker build -t $ECR_REGISTRY/edge-agent:${{ github.sha }} ./edge-agent
-        docker push $ECR_REGISTRY/edge-agent:${{ github.sha }}
+        docker tag $ECR_REGISTRY/edge-agent:${{ github.sha }} $ECR_REGISTRY/edge-agent:latest
+        docker push $ECR_REGISTRY/edge-agent --all-tags
 
     - name: Push to Docker Hub
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'

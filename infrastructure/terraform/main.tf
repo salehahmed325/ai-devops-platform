@@ -75,7 +75,7 @@ module "ecs" {
   public_subnet_ids = module.vpc.public_subnets
   private_subnet_ids  = module.vpc.private_subnets
 
-  # You will need to replace this with the actual image URI from ECR after the CI/CD pipeline runs
-  container_image = "680763994293.dkr.ecr.us-east-1.amazonaws.com/central-brain:latest" # placeholder
+  # Dynamically construct the container image URI
+  container_image             = "${module.ecr.repository_urls["central-brain"]}:${var.container_image_tag}"
   ecs_task_execution_role_arn = module.iam.ecs_task_execution_role_arn
 }

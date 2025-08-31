@@ -20,3 +20,9 @@ variable "project_name" {
   type        = string
   default     = "ai-devops-platform"
 }
+
+variable "container_image_tag" {
+  description = "The Docker image tag to deploy for the central-brain service"
+  type        = string
+  default     = "latest" # Default value, will be overridden by CI/CD
+}
