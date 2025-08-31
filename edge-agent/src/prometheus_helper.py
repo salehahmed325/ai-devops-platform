@@ -12,11 +12,10 @@ class PrometheusClient:
     async def get_metrics(self):
         """Get metrics from Prometheus"""
         try:
-            # Use a default query to get basic metrics
-            params = {'query': 'up'}
+            # Use the URL directly without appending query parameters
             async with self.session.get(
-                f"{self.prometheus_url}",
-                params=params
+                self.prometheus_url,  # Use the URL as-is
+                params={'query': 'up'}
             ) as response:
                 if response.status == 200:
                     data = await response.json()
