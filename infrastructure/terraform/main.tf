@@ -79,34 +79,18 @@ resource "aws_cloudwatch_log_group" "main" {
 # --- Networking Data Sources ---
 
 # Get the default VPC
-
 data "aws_vpc" "default" {
-    default = true
+  default = true
 }
 
-# Get all public subnets in the default VPC
-
-data "aws_subnets" "public" {
-    filter {
-        name   = "vpc-id"
-        values = [data.aws_vpc.default.id]
-    }
-    tags = {
-        Tier = "public"
-    }
+# Get all subnets in the default VPC
+data "aws_subnets" "all" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
+  }
 }
 
-# Get all private subnets in the default VPC
-
-data "aws_subnets" "private" {
-    filter {
-        name   = "vpc-id"
-        values = [data.aws_vpc.default.id]
-    }
-    tags = {
-        Tier = "private"
-    }
-}
 
 # --- ECS Deployment ---
 
@@ -119,8 +103,8 @@ module "ecs" {
     tags                        = local.common_tags
 
     vpc_id                      = data.aws_vpc.default.id
-    public_subnet_ids           = data.aws_subnets.public.ids
-    private_subnet_ids          = data.aws_subnets.private.ids
+    public_subnet_ids           = data.aws_subnets.all.ids
+    private_subnet_ids          = data.aws_subnets.all.ids
 
     # You will need to replace this with the actual image URI from ECR after the CI/CD pipeline runs
     container_image             = "680763994293.dkr.ecr.us-east-1.amazonaws.com/central-brain:latest" # placeholder
