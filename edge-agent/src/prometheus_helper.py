@@ -1,18 +1,19 @@
 import aiohttp
 import logging
+from urllib.parse import urljoin
 
 logger = logging.getLogger(__name__)
 
 
 class PrometheusClient:
     def __init__(self, prometheus_url):
-        self.prometheus_url = prometheus_url.rstrip('/')
+        self.prometheus_url = prometheus_url
         self.session = aiohttp.ClientSession()
 
     async def get_metrics(self):
         """Get metrics from Prometheus"""
         try:
-            query_url = f"{self.prometheus_url}/api/v1/query"
+            query_url = urljoin(self.prometheus_url, "api/v1/query")
             async with self.session.get(
                 query_url,
                 params={'query': 'up'}
