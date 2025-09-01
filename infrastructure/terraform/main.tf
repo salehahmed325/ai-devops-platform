@@ -41,6 +41,7 @@ module "iam" {
   aws_account_id  = local.aws_account_id
   s3_model_bucket     = module.s3_models.bucket_name
   dynamodb_table_name = "ai-devops-platform-data"
+  dynamodb_table_arn  = module.dynamodb.table_arn # Pass the ARN
   tags                = local.common_tags
 }
 
@@ -60,6 +61,13 @@ module "s3_models" {
   environment  = var.environment
   bucket_name  = "ai-devops-platform-models-${local.aws_account_id}"
   tags         = local.common_tags
+}
+
+# --- DynamoDB Table ---
+module "dynamodb" {
+  source     = "./modules/dynamodb"
+  table_name = "ai-devops-platform-data"
+  tags       = local.common_tags
 }
 
 

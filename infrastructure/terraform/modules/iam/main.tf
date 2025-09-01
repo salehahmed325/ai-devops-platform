@@ -79,7 +79,7 @@ resource "aws_iam_policy" "ai_devops_policy" {
         Action = [
           "dynamodb:PutItem"
         ]
-        Resource = "arn:aws:dynamodb:us-east-1:680763994293:table/${var.dynamodb_table_name}"
+        Resource = var.dynamodb_table_arn
       }
     ]
   })
