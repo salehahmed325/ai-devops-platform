@@ -3,6 +3,7 @@ import logging
 from typing import Any, Dict, List
 
 from decimal import Decimal
+import httpx
 
 import boto3
 import numpy as np
@@ -44,7 +45,6 @@ def convert_floats_to_decimals(obj):
 
 
 # --- Telegram Alerting ---
-import httpx
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
