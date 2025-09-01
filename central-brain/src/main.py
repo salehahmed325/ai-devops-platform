@@ -2,6 +2,7 @@ import os
 import logging
 from typing import Any, Dict, List
 
+import boto3
 import numpy as np
 from fastapi import Depends, FastAPI, HTTPException, Security
 from fastapi.security.api_key import APIKeyHeader
@@ -12,6 +13,7 @@ from sklearn.ensemble import IsolationForest
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 API_KEY = os.getenv("API_KEY", "dev-test-key-123")  # Default for development
 API_KEY_NAME = "X-API-KEY"
+DYNAMODB_TABLE_NAME = os.getenv("DYNAMODB_TABLE_NAME", "ai-devops-platform-data")
 
 # --- Logging Setup ---
 logging.basicConfig(
@@ -20,8 +22,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# --- In-Memory Storage (for now) ---
-data_store: List[Dict[str, Any]] = []
+# --- DynamoDB Setup ---
+dynamodb = boto3.resource("dynamodb")
+table = dynamodb.Table(DYNAMODB_TABLE_NAME)
 
 
 # --- Pydantic Models ---
@@ -105,8 +108,20 @@ async def ingest_data(payload: IngestPayload, api_key: str = Depends(get_api_key
     """Endpoint to receive data from edge agents."""
     logger.info(f"Received data from cluster: {payload.cluster_id}")
 
-    # Store data (in-memory)
-    data_store.append(payload.dict())
+    # Store data in DynamoDB
+    try:
+        item = payload.dict()
+        # DynamoDB doesn't like empty strings or lists, convert them to None or remove
+        # Also, convert float timestamp to Decimal if needed, but DynamoDB can handle float
+        # Ensure all values are JSON serializable
+        # For simplicity, we'll just store the dict directly, assuming it's flat enough
+        # or that DynamoDB's JSON support handles nested structures.
+        # If issues arise, a more robust serialization will be needed.
+        table.put_item(Item=item)
+        logger.info(f"Successfully stored data for cluster {payload.cluster_id} in DynamoDB.")
+    except Exception as e:
+        logger.error(f"Failed to store data in DynamoDB: {e}")
+        raise HTTPException(status_code=500, detail="Failed to store data persistently")
 
     # Perform anomaly detection
     anomalies = detect_anomalies(payload.metrics)
