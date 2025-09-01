@@ -28,7 +28,9 @@ logger = logging.getLogger(__name__)
 # --- DynamoDB Setup ---
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(DYNAMODB_TABLE_NAME)
-alert_configs_table = dynamodb.Table(os.getenv("DYNAMODB_ALERT_CONFIGS_TABLE_NAME", "ai-devops-platform-alert-configs"))
+alert_configs_table = dynamodb.Table(
+    os.getenv("DYNAMODB_ALERT_CONFIGS_TABLE_NAME", "ai-devops-platform-alert-configs")
+)
 
 
 def convert_floats_to_decimals(obj):
@@ -70,9 +72,13 @@ class AlertManager:
         except httpx.RequestError as e:
             logger.error(f"Error sending Telegram alert: {e}")
         except httpx.HTTPStatusError as e:
-            logger.error(f"Telegram API error: {e.response.status_code} - {e.response.text}")
+            logger.error(
+                f"Telegram API error: {e.response.status_code} - {e.response.text}"
+            )
         except Exception as e:
-            logger.error(f"An unexpected error occurred while sending Telegram alert: {e}")
+            logger.error(
+                f"An unexpected error occurred while sending Telegram alert: {e}"
+            )
 
 
 # --- Pydantic Models ---
@@ -174,21 +180,29 @@ async def ingest_data(payload: IngestPayload, api_key: str = Depends(get_api_key
     if anomalies:
         alert_manager = AlertManager(alert_configs_table)
         try:
-            response = alert_configs_table.get_item(Key={'cluster_id': payload.cluster_id})
-            item = response.get('Item')
-            if item and 'telegram_chat_id' in item:
-                chat_id = item['telegram_chat_id']
+            response = alert_configs_table.get_item(
+                Key={"cluster_id": payload.cluster_id}
+            )
+            item = response.get("Item")
+            if item and "telegram_chat_id" in item:
+                chat_id = item["telegram_chat_id"]
                 for anomaly in anomalies:
                     alert_message = f"🚨 Anomaly Alert for Cluster `{payload.cluster_id}` 🚨\n\n{anomaly}"
                     await alert_manager.send_telegram_alert(chat_id, alert_message)
             else:
-                logger.warning(f"No Telegram chat ID found for cluster {payload.cluster_id}. Logging alerts instead.")
+                logger.warning(
+                    f"No Telegram chat ID found for cluster {payload.cluster_id}. Logging alerts instead."
+                )
                 for anomaly in anomalies:
                     logger.warning(f"ALERT: {anomaly}")
         except Exception as e:
-            logger.error(f"Failed to retrieve alert configuration or send Telegram alert: {e}")
+            logger.error(
+                f"Failed to retrieve alert configuration or send Telegram alert: {e}"
+            )
             for anomaly in anomalies:
-                logger.warning(f"ALERT: {anomaly}") # Fallback to logging if alert sending fails
+                logger.warning(
+                    f"ALERT: {anomaly}"
+                )  # Fallback to logging if alert sending fails
 
     return {"status": "success", "message": "Data ingested successfully"}
 
