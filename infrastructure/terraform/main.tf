@@ -39,8 +39,9 @@ module "iam" {
   project_name    = var.project_name
   environment     = var.environment
   aws_account_id  = local.aws_account_id
-  s3_model_bucket = module.s3_models.bucket_name
-  tags            = local.common_tags
+  s3_model_bucket     = module.s3_models.bucket_name
+  dynamodb_table_name = "ai-devops-platform-data"
+  tags                = local.common_tags
 }
 
 # --- ECR Repositories ---

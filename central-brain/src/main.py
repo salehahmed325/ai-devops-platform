@@ -26,6 +26,17 @@ logger = logging.getLogger(__name__)
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(DYNAMODB_TABLE_NAME)
 
+from decimal import Decimal
+
+def convert_floats_to_decimals(obj):
+    if isinstance(obj, float):
+        return Decimal(str(obj))
+    if isinstance(obj, dict):
+        return {k: convert_floats_to_decimals(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [convert_floats_to_decimals(elem) for elem in obj]
+    return obj
+
 
 # --- Pydantic Models ---
 class Metric(BaseModel):
@@ -110,13 +121,7 @@ async def ingest_data(payload: IngestPayload, api_key: str = Depends(get_api_key
 
     # Store data in DynamoDB
     try:
-        item = payload.dict()
-        # DynamoDB doesn't like empty strings or lists, convert them to None or remove
-        # Also, convert float timestamp to Decimal if needed, but DynamoDB can handle float
-        # Ensure all values are JSON serializable
-        # For simplicity, we'll just store the dict directly, assuming it's flat enough
-        # or that DynamoDB's JSON support handles nested structures.
-        # If issues arise, a more robust serialization will be needed.
+        item = convert_floats_to_decimals(payload.dict())
         table.put_item(Item=item)
         logger.info(
             f"Successfully stored data for cluster {payload.cluster_id} in DynamoDB."

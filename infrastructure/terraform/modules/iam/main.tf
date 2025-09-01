@@ -72,6 +72,14 @@ resource "aws_iam_policy" "ai_devops_policy" {
           "logs:CreateLogStream"
         ]
         Resource = "arn:aws:logs:*:*:log-group:${var.project_name}*"
+      },
+      {
+        Sid    = "DynamoDBAccess"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:PutItem"
+        ]
+        Resource = "arn:aws:dynamodb:us-east-1:680763994293:table/${var.dynamodb_table_name}"
       }
     ]
   })

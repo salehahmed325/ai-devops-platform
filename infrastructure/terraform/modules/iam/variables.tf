@@ -18,6 +18,11 @@ variable "s3_model_bucket" {
   type        = string
 }
 
+variable "dynamodb_table_name" {
+  description = "Name of the DynamoDB table for data storage"
+  type        = string
+}
+
 variable "tags" {
   description = "Additional tags"
   type        = map(string)
