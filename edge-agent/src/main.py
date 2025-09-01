@@ -10,6 +10,7 @@ import uvicorn
 import os
 import logging
 import asyncio
+import httpx
 from contextlib import asynccontextmanager
 
 
@@ -49,9 +50,25 @@ class EdgeAgent:
 
     async def send_to_central_brain(self, data):
         """Send data to central brain"""
-        # TODO: Implement actual API call
-        logger.info(f"Would send data to {CENTRAL_API_URL}")
-        return True
+        if not CENTRAL_API_URL:
+            logger.warning("CENTRAL_API_URL is not set. Skipping data send.")
+            return False
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(f"{CENTRAL_API_URL}/ingest", json=data, headers={"X-API-KEY": API_KEY})
+                response.raise_for_status()  # Raise an exception for 4xx or 5xx status codes
+                logger.info(f"Successfully sent data to central brain. Status: {response.status_code}")
+                return True
+        except httpx.RequestError as e:
+            logger.error(f"An error occurred while requesting {e.request.url!r}: {e}")
+            return False
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Error response {e.response.status_code} while requesting {e.request.url!r}: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"An unexpected error occurred: {e}")
+            return False
 
     async def run_loop(self):
         """Main collection loop"""
