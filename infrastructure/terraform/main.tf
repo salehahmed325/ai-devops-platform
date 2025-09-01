@@ -41,8 +41,9 @@ module "iam" {
   aws_account_id  = local.aws_account_id
   s3_model_bucket     = module.s3_models.bucket_name
   dynamodb_table_name = "ai-devops-platform-data"
-  dynamodb_table_arn  = module.dynamodb.table_arn # Pass the ARN
-  tags                = local.common_tags
+  dynamodb_table_arn       = module.dynamodb_data.table_arn # Pass the ARN for data table
+  dynamodb_alert_table_arn = aws_dynamodb_table.alert_configs.arn # Pass the ARN for alert configs table
+  tags                     = local.common_tags
 }
 
 # --- ECR Repositories ---
@@ -63,11 +64,26 @@ module "s3_models" {
   tags         = local.common_tags
 }
 
-# --- DynamoDB Table ---
-module "dynamodb" {
+# --- DynamoDB Table (for ingested data) ---
+module "dynamodb_data" {
   source     = "./modules/dynamodb"
   table_name = "ai-devops-platform-data"
   tags       = local.common_tags
+}
+
+# --- DynamoDB Table (for alert configurations) ---
+resource "aws_dynamodb_table" "alert_configs" {
+  name         = "ai-devops-platform-alert-configs"
+  billing_mode = "PAY_PER_REQUEST"
+
+  hash_key = "cluster_id"
+
+  attribute {
+    name = "cluster_id"
+    type = "S"
+  }
+
+  tags = local.common_tags
 }
 
 
@@ -87,4 +103,5 @@ module "ecs" {
   # Dynamically construct the container image URI
   container_image             = "${module.ecr.repository_urls["central-brain"]}:${var.container_image_tag}"
   ecs_task_execution_role_arn = module.iam.ecs_task_execution_role_arn
+  telegram_bot_token          = var.telegram_bot_token # Pass Telegram bot token
 }

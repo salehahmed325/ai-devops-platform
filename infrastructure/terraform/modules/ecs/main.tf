@@ -133,6 +133,10 @@ resource "aws_ecs_task_definition" "main" {
         {
           name  = "LOG_LEVEL"
           value = "DEBUG"
+        },
+        {
+          name  = "TELEGRAM_BOT_TOKEN"
+          value = var.telegram_bot_token
         }
       ]
       portMappings = [

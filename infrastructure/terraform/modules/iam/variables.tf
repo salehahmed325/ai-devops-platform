@@ -28,6 +28,11 @@ variable "dynamodb_table_arn" {
   type        = string
 }
 
+variable "dynamodb_alert_table_arn" {
+  description = "ARN of the DynamoDB table for alert configurations"
+  type        = string
+}
+
 variable "tags" {
   description = "Additional tags"
   type        = map(string)

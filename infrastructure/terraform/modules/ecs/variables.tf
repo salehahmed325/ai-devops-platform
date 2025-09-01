@@ -56,6 +56,12 @@ variable "ecs_task_execution_role_arn" {
   type        = string
 }
 
+variable "telegram_bot_token" {
+  description = "Telegram bot token for sending alerts"
+  type        = string
+  sensitive   = true
+}
+
 variable "tags" {
   description = "A map of tags to assign to the resources"
   type        = map(string)

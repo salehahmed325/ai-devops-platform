@@ -26,3 +26,10 @@ variable "container_image_tag" {
   type        = string
   default     = "latest" # Default value, will be overridden by CI/CD
 }
+
+variable "telegram_bot_token" {
+  description = "Telegram bot token for sending alerts"
+  type        = string
+  sensitive   = true
+  default     = "" # Provide a default empty string
+}

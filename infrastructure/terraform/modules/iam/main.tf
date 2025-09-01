@@ -80,6 +80,26 @@ resource "aws_iam_policy" "ai_devops_policy" {
           "dynamodb:PutItem"
         ]
         Resource = var.dynamodb_table_arn
+      },
+      {
+        Sid    = "DynamoDBAlertConfigAccess"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:BatchGetItem",
+          "dynamodb:Query",
+          "dynamodb:Scan",
+          "dynamodb:PutItem" # To allow central-brain to store alert configs if needed
+        ]
+        Resource = var.dynamodb_alert_table_arn
+      },
+      {
+        Sid    = "SNSPublishAccess"
+        Effect = "Allow"
+        Action = [
+          "sns:Publish"
+        ]
+        Resource = "*" # Or specific SNS topic ARNs if known
       }
     ]
   })
