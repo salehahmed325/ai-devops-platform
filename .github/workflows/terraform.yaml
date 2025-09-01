@@ -19,7 +19,7 @@ jobs:
   terraform-deploy:
     name: Terraform Apply
     runs-on: ubuntu-latest
-    if: github.event.workflow_run.conclusion == 'success' # Only run if the build workflow succeeded
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' # Run if manually dispatched or if the build workflow succeeded
     defaults:
       run:
         shell: bash
