@@ -28,6 +28,7 @@ table = dynamodb.Table(DYNAMODB_TABLE_NAME)
 
 from decimal import Decimal
 
+
 def convert_floats_to_decimals(obj):
     if isinstance(obj, float):
         return Decimal(str(obj))
