@@ -2,6 +2,8 @@ import os
 import logging
 from typing import Any, Dict, List
 
+from decimal import Decimal
+
 import boto3
 import numpy as np
 from fastapi import Depends, FastAPI, HTTPException, Security
@@ -26,18 +28,6 @@ logger = logging.getLogger(__name__)
 # --- DynamoDB Setup ---
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(DYNAMODB_TABLE_NAME)
-
-from decimal import Decimal
-
-
-def convert_floats_to_decimals(obj):
-    if isinstance(obj, float):
-        return Decimal(str(obj))
-    if isinstance(obj, dict):
-        return {k: convert_floats_to_decimals(v) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [convert_floats_to_decimals(elem) for elem in obj]
-    return obj
 
 
 # --- Pydantic Models ---
