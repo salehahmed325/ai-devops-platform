@@ -22,7 +22,9 @@ class PrometheusClient:
             logger.error(f"An error occurred while requesting {e.request.url!r}: {e}")
             return []
         except httpx.HTTPStatusError as e:
-            logger.error(f"Error response {e.response.status_code} while requesting {e.request.url!r}: {e}")
+            logger.error(
+                f"Error response {e.response.status_code} while requesting {e.request.url!r}: {e}"
+            )
             return []
         except Exception as e:
             logger.error(f"An unexpected error occurred: {e}")
