@@ -120,10 +120,12 @@ async def health_check():
 async def ingest_data(payload: IngestPayload, api_key: str = Depends(get_api_key)):
     """Endpoint to receive data from edge agents."""
     logger.info(f"Received data from cluster: {payload.cluster_id}")
+    logger.debug(f"Ingest payload: {payload.dict()}")
 
     # Store data in DynamoDB
     try:
         item = convert_floats_to_decimals(payload.dict())
+        logger.debug(f"Item to be stored in DynamoDB: {item}")
         table.put_item(Item=item)
         logger.info(
             f"Successfully stored data for cluster {payload.cluster_id} in DynamoDB."
