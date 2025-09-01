@@ -9,6 +9,7 @@ from fastapi.security.api_key import APIKeyHeader
 from pydantic import BaseModel
 from sklearn.ensemble import IsolationForest
 
+
 # --- Configuration ---
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 API_KEY = os.getenv("API_KEY", "dev-test-key-123")  # Default for development
