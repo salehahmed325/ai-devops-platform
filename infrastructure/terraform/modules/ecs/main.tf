@@ -128,6 +128,12 @@ resource "aws_ecs_task_definition" "main" {
       cpu       = var.cpu
       memory    = var.memory
       essential = true
+      environment = [
+        {
+          name  = "LOG_LEVEL"
+          value = "DEBUG"
+        }
+      ]
       portMappings = [
         {
           containerPort = var.container_port
