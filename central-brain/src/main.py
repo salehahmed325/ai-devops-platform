@@ -30,6 +30,16 @@ dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(DYNAMODB_TABLE_NAME)
 
 
+def convert_floats_to_decimals(obj):
+    if isinstance(obj, float):
+        return Decimal(str(obj))
+    if isinstance(obj, dict):
+        return {k: convert_floats_to_decimals(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [convert_floats_to_decimals(elem) for elem in obj]
+    return obj
+
+
 # --- Pydantic Models ---
 class Metric(BaseModel):
     metric: Dict[str, str]
