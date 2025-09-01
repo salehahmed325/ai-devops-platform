@@ -37,6 +37,7 @@ jobs:
         terraform_version: ${{ env.TF_VERSION }}
 
     - name: Download Image Tag Artifact
+      if: github.event_name == 'workflow_run'
       uses: actions/download-artifact@v4
       with:
         name: central-brain-image-tag
@@ -46,6 +47,7 @@ jobs:
 
     - name: Read Image Tag
       id: image_tag
+      if: github.event_name == 'workflow_run'
       run: echo "tag=$(cat artifacts/image_tag.txt)" >> $GITHUB_OUTPUT
 
     - name: Configure AWS credentials
@@ -67,4 +69,4 @@ jobs:
     - name: Terraform Apply
       id: apply
       run: |
-        terraform apply -auto-approve -input=false -var="container_image_tag=${{ steps.image_tag.outputs.tag }}"
+        terraform apply -auto-approve -input=false -var="container_image_tag=${{ steps.image_tag.outputs.tag || 'latest' }}"
