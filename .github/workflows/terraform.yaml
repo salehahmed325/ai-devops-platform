@@ -26,6 +26,7 @@ jobs:
         working-directory: infrastructure/terraform
     env:
       TF_VAR_aws_account_id: ${{ secrets.AWS_ACCOUNT_ID }}
+      TF_VAR_telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
     steps:
     - name: Checkout code
