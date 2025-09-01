@@ -16,10 +16,13 @@ class PrometheusClient:
             # Step 1: Get all active series
             series_url = urljoin(self.prometheus_url, "api/v1/series")
             async with httpx.AsyncClient() as client:
-                series_response = await client.get(series_url)
-                series_response.raise_for_status()
-                series_data = series_response.json()
-                series_list = series_data.get("data", [])
+                match_query = """{__name__=~".+"}"""
+            series_response = await client.get(
+                series_url, params={"match[]": match_query}
+            )
+            series_response.raise_for_status()
+            series_data = series_response.json()
+            series_list = series_data.get("data", [])
 
             logger.info(f"Found {len(series_list)} active series in Prometheus.")
 
