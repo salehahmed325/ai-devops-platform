@@ -118,7 +118,9 @@ async def ingest_data(payload: IngestPayload, api_key: str = Depends(get_api_key
         # or that DynamoDB's JSON support handles nested structures.
         # If issues arise, a more robust serialization will be needed.
         table.put_item(Item=item)
-        logger.info(f"Successfully stored data for cluster {payload.cluster_id} in DynamoDB.")
+        logger.info(
+            f"Successfully stored data for cluster {payload.cluster_id} in DynamoDB."
+        )
     except Exception as e:
         logger.error(f"Failed to store data in DynamoDB: {e}")
         raise HTTPException(status_code=500, detail="Failed to store data persistently")
