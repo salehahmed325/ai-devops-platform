@@ -56,15 +56,23 @@ class EdgeAgent:
 
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.post(f"{CENTRAL_API_URL}/ingest", json=data, headers={"X-API-KEY": API_KEY})
+                response = await client.post(
+                    f"{CENTRAL_API_URL}/ingest",
+                    json=data,
+                    headers={"X-API-KEY": API_KEY},
+                )
                 response.raise_for_status()  # Raise an exception for 4xx or 5xx status codes
-                logger.info(f"Successfully sent data to central brain. Status: {response.status_code}")
+                logger.info(
+                    f"Successfully sent data to central brain. Status: {response.status_code}"
+                )
                 return True
         except httpx.RequestError as e:
             logger.error(f"An error occurred while requesting {e.request.url!r}: {e}")
             return False
         except httpx.HTTPStatusError as e:
-            logger.error(f"Error response {e.response.status_code} while requesting {e.request.url!r}: {e}")
+            logger.error(
+                f"Error response {e.response.status_code} while requesting {e.request.url!r}: {e}"
+            )
             return False
         except Exception as e:
             logger.error(f"An unexpected error occurred: {e}")
