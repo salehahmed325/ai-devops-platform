@@ -31,15 +31,21 @@ class PrometheusClient:
                 query_parts = []
                 metric_name = series_labels.pop("__name__", None)
                 if not metric_name:
-                    continue # Skip if no metric name
+                    continue  # Skip if no metric name
 
                 for key, value in series_labels.items():
-                    query_parts.append(f"{key}=\"{value}\"")
+                    query_parts.append(f'{key}="{value}"')
 
-                query_string = f"{metric_name}{{{ ',' .join(query_parts) }}}" if query_parts else metric_name
+                query_string = (
+                    f"{metric_name}{{{ ',' .join(query_parts) }}}"
+                    if query_parts
+                    else metric_name
+                )
 
                 try:
-                    metric_response = await client.get(query_url, params={"query": query_string})
+                    metric_response = await client.get(
+                        query_url, params={"query": query_string}
+                    )
                     metric_response.raise_for_status()
                     metric_data = metric_response.json()
                     result = metric_data.get("data", {}).get("result", [])
