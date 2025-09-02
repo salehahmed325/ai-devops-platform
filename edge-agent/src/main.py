@@ -90,16 +90,20 @@ class EdgeAgent:
                 metrics = await self.collect_metrics()
                 k8s_state = await self.kubernetes.get_cluster_state()
 
-                # Prepare payload
-                payload = {
-                    "cluster_id": CLUSTER_ID,
-                    "metrics": metrics,
-                    "kubernetes_state": k8s_state,
-                    "timestamp": time.time(),
-                }
-
-                # Send to central brain
-                await self.send_to_central_brain(payload)
+                # Send to central brain in batches
+                batch_size = 5000
+                for i in range(0, len(metrics), batch_size):
+                    batch = metrics[i : i + batch_size]
+                    payload = {
+                        "cluster_id": CLUSTER_ID,
+                        "metrics": batch,
+                        "kubernetes_state": k8s_state,
+                        "timestamp": time.time(),
+                    }
+                    logger.info(
+                        f"Sending batch of {len(batch)} metrics to central brain."
+                    )
+                    await self.send_to_central_brain(payload)
 
                 # Wait for next collection
                 await asyncio.sleep(300)  # 5 minutes
