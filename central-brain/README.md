@@ -1,18 +1,37 @@
-# Central Brain Service
+# Central Brain
 
-## Purpose
-The Central Brain service is the core analytical component of the AI DevOps Platform. It is responsible for:
-- Ingesting metric and Kubernetes state data from Edge Agents.
-- Performing real-time anomaly detection on the ingested data.
-- Storing processed data persistently in a DynamoDB table for historical analysis and future machine learning model training.
-- Providing an API endpoint for data ingestion and potentially for querying processed data (future work).
-- Sending real-time alerts for detected anomalies to configured channels (e.g., Telegram).
+The `central-brain` is the core backend service for the AI DevOps Platform. It is a Python FastAPI application responsible for ingesting, analyzing, and storing metrics, as well as sending alerts.
 
-## How it Works
-1.  **Data Ingestion**: Edge Agents deployed in various clusters send metric and Kubernetes state data to the `/ingest` endpoint of the Central Brain.
-2.  **Data Processing**: Upon receiving data, the Central Brain performs the following:
-    *   **Data Transformation**: Converts incoming data, specifically handling float-to-Decimal conversion for compatibility with DynamoDB.
-    *   **Persistent Storage**: Stores the transformed data in an AWS DynamoDB table (`ai-devops-platform-data` by default) for long-term storage and retrieval.
-    *   **Anomaly Detection**: Applies a simple Isolation Forest model to detect anomalies in key metrics (e.g., the `up` metric).
-    *   **Alerting**: Retrieves alert configurations (e.g., Telegram chat IDs) from a dedicated DynamoDB table (`ai-devops-platform-alert-configs`) and sends real-time notifications for detected anomalies to the specified channels.
-3.  **Scalability**: The service is deployed as an AWS ECS Fargate service, allowing it to scale automatically based on demand.
+## Features
+
+*   **Metric Ingestion**: Exposes a secure `/ingest` endpoint to receive metric payloads from `edge-agent`s.
+*   **Anomaly Detection**: Analyzes incoming metrics for anomalies. (Currently, it checks if the `up` metric is `0`).
+*   **Data Storage**: Stores all ingested metrics in an AWS DynamoDB table for historical analysis and model training.
+*   **Alerting**: Sends alerts via Telegram when anomalies are detected.
+
+## Configuration
+
+The `central-brain` is configured via environment variables. These are set automatically by the Terraform deployment based on the created infrastructure and input variables.
+
+| Environment Variable  | Description                                                                 | Set Via                  |
+| --------------------- | --------------------------------------------------------------------------- | ------------------------ |
+| `CENTRAL_API_URL`     | The public URL of the Application Load Balancer fronting the service.         | Terraform Output         |
+| `API_KEY`             | The secret API key that agents must use to authenticate.                      | Terraform Variable       |
+| `PROMETHEUS_URL`      | The URL of the Prometheus instance to scrape (used by `edge-agent`).          | `edge-agent` config      |
+| `LOG_LEVEL`           | The application log level (e.g., `INFO`, `DEBUG`).                            | Terraform Variable       |
+| `TELEGRAM_BOT_TOKEN`  | The secret token for the Telegram bot used for sending alerts.                | Terraform Variable (Secret) |
+| `TELEGRAM_CHAT_ID`    | The ID of the Telegram chat or channel to send alerts to.                     | Terraform Variable       |
+| `AWS_REGION`          | The AWS region where the infrastructure is deployed.                          | Environment (via ECS)    |
+| `DYNAMODB_TABLE_DATA` | The name of the DynamoDB table for storing metric data.                       | Terraform Output         |
+| `DYNAMODB_TABLE_ALERTS`| The name of the DynamoDB table for storing alert configurations.              | Terraform Output         |
+
+## Deployment
+
+The `central-brain` is designed for automated, zero-touch deployment.
+
+1.  **Build**: The `.github/workflows/central-brain.yaml` GitHub Actions workflow is triggered on every push to the `main` branch.
+2.  **Test**: The workflow runs unit tests.
+3.  **Publish**: If tests pass, the workflow builds a new Docker image and pushes it to the AWS ECR repository.
+4.  **Deploy**: The Terraform configuration for the ECS service is set up to pull the `latest` image from ECR. When the ECS task is restarted or updated, it will automatically use the new image.
+
+There are no manual deployment steps required for this component under normal operation.
