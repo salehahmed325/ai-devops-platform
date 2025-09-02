@@ -10,6 +10,7 @@ import uvicorn
 import os
 import logging
 import asyncio
+import time
 import httpx
 from contextlib import asynccontextmanager
 
@@ -93,7 +94,7 @@ class EdgeAgent:
                     "cluster_id": CLUSTER_ID,
                     "metrics": metrics,
                     "kubernetes_state": k8s_state,
-                    "timestamp": asyncio.get_event_loop().time(),
+                    "timestamp": time.time(),
                 }
 
                 # Send to central brain
