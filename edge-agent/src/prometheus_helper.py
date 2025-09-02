@@ -61,7 +61,9 @@ class PrometheusClient:
                             f"Prometheus API error for {query_string!r}: {e.response.status_code} - {e.response.text}"
                         )
 
-                logger.info(f"Collected {len(all_metrics)} actual metrics from Prometheus.")
+                logger.info(
+                    f"Collected {len(all_metrics)} actual metrics from Prometheus."
+                )
                 return all_metrics
 
         except httpx.RequestError as e:
