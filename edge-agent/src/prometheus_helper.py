@@ -18,7 +18,7 @@ class PrometheusClient:
                 series_url = urljoin(self.prometheus_url, "api/v1/series")
                 match_query = '{__name__=~".+"}'  # This is the query to get all series
                 series_response = await client.get(
-                    series_url, params={"match[]": match_query}
+                    series_url, params={"match[]": match_query}, timeout=30.0
                 )
                 series_response.raise_for_status()
                 series_data = series_response.json()
@@ -47,7 +47,7 @@ class PrometheusClient:
 
                     try:
                         metric_response = await client.get(
-                            query_url, params={"query": query_string}
+                            query_url, params={"query": query_string}, timeout=30.0
                         )
                         metric_response.raise_for_status()
                         metric_data = metric_response.json()
