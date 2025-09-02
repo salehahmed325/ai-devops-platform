@@ -91,7 +91,7 @@ class EdgeAgent:
                 k8s_state = await self.kubernetes.get_cluster_state()
 
                 # Send to central brain in batches
-                batch_size = 5000
+                batch_size = 1000
                 for i in range(0, len(metrics), batch_size):
                     batch = metrics[i : i + batch_size]
                     payload = {
