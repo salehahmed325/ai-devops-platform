@@ -61,6 +61,7 @@ class EdgeAgent:
                     f"{CENTRAL_API_URL}/ingest",
                     json=data,
                     headers={"X-API-KEY": API_KEY},
+                    timeout=60.0,
                 )
                 response.raise_for_status()  # Raise an exception for 4xx or 5xx status codes
                 logger.info(
