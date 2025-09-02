@@ -9,8 +9,8 @@
 
 ### a. `edge-agent`
 - **Purpose**: A Dockerized Python (FastAPI) application that is deployed on a target server.
-- **Function**: It queries a Prometheus instance to collect metrics, and is intended to forward them to the `central-brain`.
-- **Status**: **COMPLETE & WORKING**. The agent is containerized, and its CI/CD pipeline in `.github/workflows/edge-agent.yaml` automatically builds, tests, and pushes its image to both AWS ECR and Docker Hub.
+- **Function**: It queries a Prometheus instance to collect metrics, and forwards them to the `central-brain` in batches.
+- **Status**: **COMPLETE & WORKING**. The agent is containerized, and its CI/CD pipeline in `.github/workflows/edge-agent.yaml` automatically builds, tests, and pushes its image to both AWS ECR and Docker Hub. The data collection and batching mechanism has been debugged and is now working reliably.
 
 ### b. `central-brain`
 - **Purpose**: A Dockerized Python (FastAPI) application that serves as the AI/ML core.
@@ -30,53 +30,39 @@
     - An **ECS Cluster** (`ai-devops-platform-cluster-dev`).
     - An **Application Load Balancer** to expose the `central-brain` service.
     - An **ECS Service** (`ai-devops-platform-service-dev`) running the `central-brain` container with `LOG_LEVEL=DEBUG` and `TELEGRAM_BOT_TOKEN` environment variables.
-- **Status**: **COMPLETE**. The infrastructure has been successfully deployed via the workflow in `.github/workflows/terraform.yaml` (after several fixes to the workflow itself).
+- **Status**: **COMPLETE**. The infrastructure has been successfully deployed via the workflow in `.github/workflows/terraform.yaml`.
 
 ## 3. How to Resume
 
 When you start our new session, paste the entire content of this file as your first message. Then, we can proceed with the following next steps.
 
-## 4. Current State & Next Steps
+## 4. Session Summary (2025-09-02)
+
+Today, we successfully debugged and fixed the end-to-end data pipeline. Here is a summary of the steps taken:
+
+1.  **Initial Problem**: The `edge-agent` was not correctly collecting metrics from Prometheus due to a bug in `prometheus_helper.py`.
+2.  **Fix 1**: We corrected the `prometheus_helper.py` file to correctly handle the `httpx` client.
+3.  **New Problem**: The `edge-agent` was timing out when connecting to Prometheus. We discovered this was due to a networking issue between the Docker container and the host machine.
+4.  **Fix 2**: We configured the `edge-agent` to use `host.docker.internal` to connect to the host machine, and added the `--add-host` flag to the `docker run` command.
+5.  **New Problem**: The `edge-agent` was timing out when sending the large payload of metrics to the `central-brain`.
+6.  **Fix 3**: We implemented batching in the `edge-agent` to send the metrics in smaller chunks.
+7.  **New Problem**: The `central-brain` was still timing out because the batches were too large for DynamoDB's item size limit.
+8.  **Fix 4**: We reduced the batch size to a smaller number (200), which resolved the final issue.
 
 **Current State:**
-*   **End-to-End Data Flow:** `edge-agent` collects metrics and sends them to `central-brain`. `central-brain` ingests, processes, stores in DynamoDB, and sends Telegram alerts for anomalies.
-*   **Infrastructure:** All necessary AWS resources are provisioned via Terraform.
-*   **Alerting:** Telegram alerting is functional.
+*   **End-to-End Data Flow:** The `edge-agent` is now reliably collecting all metrics from Prometheus and sending them in batches to the `central-brain`. The `central-brain` is successfully ingesting this data and storing it in DynamoDB.
+*   **Alerting:** The basic alerting for the `up` metric is still functional.
 
-**Outstanding Issue:**
-*   **Edge Agent Metric Collection:** The `edge-agent/src/prometheus_helper.py` file's `get_metrics` function has a syntax/formatting issue that prevents it from correctly collecting all Prometheus metrics. This needs to be manually corrected.
+## 5. Next Steps
 
-**Manual Correction Required for `edge-agent/src/prometheus_helper.py`:**
-*   **Open the file:** `D:\projects\ai-devops-platform\edge-agent\src\prometheus_helper.py`
-*   **Find this block of code (around line 17):**
-    ```python
-                series_url = urljoin(self.prometheus_url, "api/v1/series")            async with httpx.AsyncClient() as client:                                match_query = """{__name__=~".+"}"""
-                series_response = await client.get(series_url, params={"match[]": match_query})
-    ```
-*   **Replace that entire block with this corrected and properly formatted code:**
-    ```python
-            series_url = urljoin(self.prometheus_url, "api/v1/series")
-            async with httpx.AsyncClient() as client:
-                match_query = '{__name__=~".+"}' # This is the query to get all series
-                series_response = await client.get(series_url, params={"match[]": match_query})
-    ```
-*   **Save the file.**
-*   **Run `black` on the file manually** to ensure it's formatted correctly:
-    `D:/projects/ai-devops-platform/venv/Scripts/black.exe edge-agent/src/prometheus_helper.py`
-*   **Commit and push this change to GitHub.** This will trigger the `Build Edge Agent` workflow.
-*   **Pull the latest image on your dev server and run it.**
+The next major task is to leverage the rich dataset we are now collecting.
 
-**Next Steps (after manual correction and `edge-agent` update):**
-
-1.  **Verify Expanded Metric Collection:** Confirm the `edge-agent` is now collecting all Prometheus metrics by checking `central-brain` logs for a wider variety of ingested data.
-2.  **Refine Anomaly Detection in `central-brain`:**
-    *   The `detect_anomalies` function currently only looks at the `up` metric. It needs to be updated to analyze the expanded set of metrics for anomalies. This will be a significant AI/ML task.
-3.  **Review and Refine Alerting**:
-    *   Consider adding more sophisticated alert templating or customization options.
+1.  **Refine Anomaly Detection in `central-brain`**:
+    *   **Explore the Data**: Analyze the metrics being stored in the `ai-devops-platform-data` DynamoDB table to identify which metrics are the best candidates for anomaly detection.
+    *   **Choose Models**: Select appropriate statistical methods or machine learning models for the chosen metrics.
+    *   **Implement**: Update the `detect_anomalies` function in `central-brain/src/main.py` to incorporate the new models.
+2.  **Review and Refine Alerting**:
+    *   Consider adding more sophisticated alert templating to provide more context in the alerts.
     *   Explore integrating other alerting channels (e.g., email via SNS, PagerDuty, Slack).
-4.  **Implement AI/ML for Prediction and Optimization**:
-    *   Utilize the historical data in DynamoDB to train machine learning models for predicting future issues or suggesting infrastructure optimizations.
-5.  **Develop a User Interface/Dashboard**:
+3.  **Develop a User Interface/Dashboard**:
     *   Create a frontend application to visualize ingested data, anomalies, and alert configurations.
-6.  **Expand Edge Agent Capabilities (Further)**:
-    *   Add more data collection points or integrate with other monitoring tools.
