@@ -1,6 +1,6 @@
 import os
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from decimal import Decimal
 import httpx
@@ -90,7 +90,7 @@ class Metric(BaseModel):
 class IngestPayload(BaseModel):
     cluster_id: str
     metrics: List[Metric]
-    kubernetes_state: Dict[str, Any]
+    kubernetes_state: Optional[Dict[str, Any]] = None
     timestamp: float
 
 
