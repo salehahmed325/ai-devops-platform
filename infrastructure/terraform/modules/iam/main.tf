@@ -77,7 +77,8 @@ resource "aws_iam_policy" "ai_devops_policy" {
         Sid    = "DynamoDBAccess"
         Effect = "Allow"
         Action = [
-          "dynamodb:PutItem"
+          "dynamodb:PutItem",
+          "dynamodb:BatchWriteItem"
         ]
         Resource = var.dynamodb_table_arn
       },
