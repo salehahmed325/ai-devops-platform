@@ -1,5 +1,5 @@
 # Put your custom imports FIRST
-from prometheus_helper import PrometheusClient
+from prometheus_helper import get_selected_metrics
 from k8s_client import KubernetesClient
 
 # Then import third-party packages
@@ -24,6 +24,24 @@ PROMETHEUS_URL = os.getenv(
 )
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
+# List of specific metrics to collect
+TARGET_METRICS = [
+    "up",
+    "node_cpu_seconds_total",
+    "node_memory_MemTotal_bytes",
+    "node_memory_MemFree_bytes",
+    "node_memory_MemAvailable_bytes",
+    "node_disk_read_bytes_total",
+    "node_disk_written_bytes_total",
+    "node_network_receive_bytes_total",
+    "node_network_transmit_bytes_total",
+    "container_cpu_usage_seconds_total",
+    "container_memory_usage_bytes",
+    "container_network_receive_bytes_total",
+    "container_network_transmit_bytes_total",
+]
+
+
 # Setup logging
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL),
@@ -34,20 +52,20 @@ logger = logging.getLogger(__name__)
 
 class EdgeAgent:
     def __init__(self):
-        self.prometheus = PrometheusClient(PROMETHEUS_URL)
         self.kubernetes = KubernetesClient()
         self.is_healthy = True
 
     async def collect_metrics(self):
-        """Collect metrics from Prometheus"""
+        """Collect a curated list of metrics from Prometheus"""
         try:
-            metrics = await self.prometheus.get_metrics()
-            logger.info(f"Collected {len(metrics)} metrics")
+            logger.info(f"Collecting {len(TARGET_METRICS)} target metrics...")
+            metrics = await get_selected_metrics(PROMETHEUS_URL, TARGET_METRICS)
+            logger.info(f"Collected {len(metrics)} data points.")
             return metrics
         except Exception as e:
             logger.error(f"Failed to collect metrics: {e}")
             self.is_healthy = False
-            return {}
+            return []
 
     async def send_to_central_brain(self, data):
         """Send data to central brain"""
@@ -92,18 +110,21 @@ class EdgeAgent:
 
                 # Send to central brain in batches
                 batch_size = 200
-                for i in range(0, len(metrics), batch_size):
-                    batch = metrics[i : i + batch_size]
-                    payload = {
-                        "cluster_id": CLUSTER_ID,
-                        "metrics": batch,
-                        "kubernetes_state": k8s_state,
-                        "timestamp": time.time(),
-                    }
-                    logger.info(
-                        f"Sending batch of {len(batch)} metrics to central brain."
-                    )
-                    await self.send_to_central_brain(payload)
+                if not metrics:
+                    logger.warning("No metrics collected, skipping send.")
+                else:
+                    for i in range(0, len(metrics), batch_size):
+                        batch = metrics[i : i + batch_size]
+                        payload = {
+                            "cluster_id": CLUSTER_ID,
+                            "metrics": batch,
+                            "kubernetes_state": k8s_state,
+                            "timestamp": time.time(),
+                        }
+                        logger.info(
+                            f"Sending batch of {len(batch)} metrics to central brain."
+                        )
+                        await self.send_to_central_brain(payload)
 
                 # Wait for next collection
                 await asyncio.sleep(300)  # 5 minutes
