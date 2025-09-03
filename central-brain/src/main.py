@@ -154,6 +154,9 @@ def detect_cpu_anomalies(metrics: List[Metric]) -> List[str]:
             if m.metric.get("__name__") == "node_cpu_seconds_total"
             and m.metric.get("mode") == "user"
         ]
+        logger.info(
+            f"Found {len(cpu_metrics)} 'node_cpu_seconds_total' metrics with mode 'user'."
+        )
 
         if len(cpu_metrics) < 2:
             return []
@@ -170,6 +173,8 @@ def detect_cpu_anomalies(metrics: List[Metric]) -> List[str]:
             if time_diff > 0:
                 rates.append(value_diff / time_diff)
 
+        logger.info(f"Calculated {len(rates)} CPU usage rates.")
+
         if not rates:
             return []
 
@@ -177,6 +182,9 @@ def detect_cpu_anomalies(metrics: List[Metric]) -> List[str]:
         mean_rate = np.mean(rates)
         std_dev_rate = np.std(rates)
         threshold = mean_rate + 3 * std_dev_rate
+        logger.info(
+            f"CPU anomaly detection threshold: {threshold:.2f} (mean: {mean_rate:.2f}, std_dev: {std_dev_rate:.2f})"
+        )
 
         for i, rate in enumerate(rates):
             if rate > threshold:
