@@ -160,71 +160,77 @@ async def health_check():
 @app.post("/ingest")
 async def ingest_data(payload: IngestPayload, api_key: str = Depends(get_api_key)):
     """Endpoint to receive data from edge agents."""
-    logger.info(f"Received data from cluster: {payload.cluster_id}")
-    logger.debug(f"Ingest payload: {payload.dict()}")
-
-    # Store data in DynamoDB
     try:
-        # Use a batch writer to handle potentially large metric lists
-        with table.batch_writer() as batch:
-            # Store each metric as a separate item
-            for metric in payload.metrics:
-                item = {
-                    "cluster_id": payload.cluster_id,
-                    "timestamp": Decimal(str(payload.timestamp)),
-                    "metric_name": metric.metric.get("__name__"),
-                    "metric_labels": convert_floats_to_decimals(metric.metric),
-                    "metric_value": convert_floats_to_decimals(metric.value),
-                }
-                batch.put_item(Item=item)
+        logger.info(f"Received data from cluster: {payload.cluster_id}")
+        logger.debug(f"Ingest payload: {payload.dict()}")
 
-            # Store Kubernetes state as a separate item if it exists
-            if payload.kubernetes_state:
-                k8s_item = {
-                    "cluster_id": payload.cluster_id,
-                    "timestamp": Decimal(str(payload.timestamp)),
-                    "data_type": "kubernetes_state",
-                    "state": convert_floats_to_decimals(payload.kubernetes_state),
-                }
-                batch.put_item(Item=k8s_item)
-
-        logger.info(
-            f"Successfully stored data for cluster {payload.cluster_id} in DynamoDB."
-        )
-    except Exception as e:
-        logger.error(f"Failed to store data in DynamoDB: {e}")
-        raise HTTPException(status_code=500, detail="Failed to store data persistently")
-
-    # Perform anomaly detection
-    anomalies = detect_anomalies(payload.metrics)
-    if anomalies:
-        alert_manager = AlertManager(alert_configs_table)
+        # Store data in DynamoDB
         try:
-            response = alert_configs_table.get_item(
-                Key={"cluster_id": payload.cluster_id}
+            # Use a batch writer to handle potentially large metric lists
+            with table.batch_writer() as batch:
+                # Store each metric as a separate item
+                for metric in payload.metrics:
+                    item = {
+                        "cluster_id": payload.cluster_id,
+                        "timestamp": Decimal(str(payload.timestamp)),
+                        "metric_name": metric.metric.get("__name__"),
+                        "metric_labels": convert_floats_to_decimals(metric.metric),
+                        "metric_value": convert_floats_to_decimals(metric.value),
+                    }
+                    batch.put_item(Item=item)
+
+                # Store Kubernetes state as a separate item if it exists
+                if payload.kubernetes_state:
+                    k8s_item = {
+                        "cluster_id": payload.cluster_id,
+                        "timestamp": Decimal(str(payload.timestamp)),
+                        "data_type": "kubernetes_state",
+                        "state": convert_floats_to_decimals(payload.kubernetes_state),
+                    }
+                    batch.put_item(Item=k8s_item)
+
+            logger.info(
+                f"Successfully stored data for cluster {payload.cluster_id} in DynamoDB."
             )
-            item = response.get("Item")
-            if item and "telegram_chat_id" in item:
-                chat_id = item["telegram_chat_id"]
-                for anomaly in anomalies:
-                    alert_message = f"🚨 Anomaly Alert for Cluster `{payload.cluster_id}` 🚨\n\n{anomaly}"
-                    await alert_manager.send_telegram_alert(chat_id, alert_message)
-            else:
-                logger.warning(
-                    f"No Telegram chat ID found for cluster {payload.cluster_id}. Logging alerts instead."
+        except Exception as e:
+            logger.error(f"Failed to store data in DynamoDB: {e}")
+            raise HTTPException(
+                status_code=500, detail="Failed to store data persistently"
+            )
+
+        # Perform anomaly detection
+        anomalies = detect_anomalies(payload.metrics)
+        if anomalies:
+            alert_manager = AlertManager(alert_configs_table)
+            try:
+                response = alert_configs_table.get_item(
+                    Key={"cluster_id": payload.cluster_id}
+                )
+                item = response.get("Item")
+                if item and "telegram_chat_id" in item:
+                    chat_id = item["telegram_chat_id"]
+                    for anomaly in anomalies:
+                        alert_message = f"🚨 Anomaly Alert for Cluster `{payload.cluster_id}` 🚨\n\n{anomaly}"
+                        await alert_manager.send_telegram_alert(chat_id, alert_message)
+                else:
+                    logger.warning(
+                        f"No Telegram chat ID found for cluster {payload.cluster_id}. Logging alerts instead."
+                    )
+                    for anomaly in anomalies:
+                        logger.warning(f"ALERT: {anomaly}")
+            except Exception as e:
+                logger.error(
+                    f"Failed to retrieve alert configuration or send Telegram alert: {e}"
                 )
                 for anomaly in anomalies:
-                    logger.warning(f"ALERT: {anomaly}")
-        except Exception as e:
-            logger.error(
-                f"Failed to retrieve alert configuration or send Telegram alert: {e}"
-            )
-            for anomaly in anomalies:
-                logger.warning(
-                    f"ALERT: {anomaly}"
-                )  # Fallback to logging if alert sending fails
+                    logger.warning(
+                        f"ALERT: {anomaly}"
+                    )  # Fallback to logging if alert sending fails
 
-    return {"status": "success", "message": "Data ingested successfully"}
+        return {"status": "success", "message": "Data ingested successfully"}
+    except Exception as e:
+        logger.error(f"An unexpected error occurred in ingest_data: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="An unexpected error occurred.")
 
 
 if __name__ == "__main__":
