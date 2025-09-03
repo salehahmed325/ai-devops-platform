@@ -152,7 +152,7 @@ def detect_cpu_anomalies(metrics: List[Metric]) -> List[str]:
             m
             for m in metrics
             if m.metric.get("__name__") == "node_cpu_seconds_total"
-            and m.metric.get("mode") == "idle"
+            and m.metric.get("mode") == "user"
         ]
 
         if len(cpu_metrics) < 2:
