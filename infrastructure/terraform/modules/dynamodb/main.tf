@@ -15,10 +15,7 @@ resource "aws_dynamodb_table" "main" {
     type = "S" # String
   }
 
-  attribute {
-    name = "timestamp"
-    type = "N" # Number
-  }
+  
 
   tags = var.tags
 }
