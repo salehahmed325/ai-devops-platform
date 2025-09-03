@@ -197,6 +197,7 @@ def detect_cpu_anomalies(metrics: List[Metric]) -> List[str]:
     except Exception as e:
         logger.error(f"CPU anomaly detection failed: {e}")
 
+    logger.info("Finished CPU anomaly detection.")
     return anomalies
 
 
