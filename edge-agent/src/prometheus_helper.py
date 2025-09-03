@@ -21,7 +21,7 @@ async def get_selected_metrics(prometheus_url: str, metrics: list[str]) -> list:
             try:
                 # Use a query that gets the latest value for all time series of a given metric name.
                 # This is much more efficient than querying every single series individually.
-                query = f"last_over_time({metric_name}[1m])"
+                query = f"{metric_name}[5m]"
                 response = await client.get(
                     f"{prometheus_url}/api/v1/query", params={"query": query}
                 )

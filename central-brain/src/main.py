@@ -120,7 +120,7 @@ def detect_up_anomalies(metrics: List[Metric]) -> List[str]:
             return []  # Not enough data to detect anomalies
 
         # Reshape data for Isolation Forest
-        X = np.array(up_values).reshape(-1, 1)
+        X = np.array(up_values, dtype=np.float64).reshape(-1, 1)
 
         # Fit the model
         clf = IsolationForest(contamination="auto", random_state=42)
@@ -161,6 +161,7 @@ def detect_cpu_anomalies(metrics: List[Metric]) -> List[str]:
             logger.info(f"  - Timestamp: {m.value[0]}")
 
         if len(cpu_metrics) < 2:
+            logger.info("Not enough CPU metrics to detect anomalies. Returning.")
             return []
 
         # Calculate the rate of change for CPU usage
