@@ -3,10 +3,15 @@ resource "aws_dynamodb_table" "main" {
   billing_mode = "PAY_PER_REQUEST" # Use on-demand capacity
 
   hash_key  = "cluster_id"
-  range_key = "timestamp"
+  range_key = "metric_identifier"
 
   attribute {
     name = "cluster_id"
+    type = "S" # String
+  }
+
+  attribute {
+    name = "metric_identifier"
     type = "S" # String
   }
 

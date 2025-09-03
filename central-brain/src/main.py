@@ -170,8 +170,16 @@ async def ingest_data(payload: IngestPayload, api_key: str = Depends(get_api_key
             with table.batch_writer() as batch:
                 # Store each metric as a separate item
                 for metric in payload.metrics:
+                    # Create a unique identifier for the metric
+                    labels = []
+                    for k, v in sorted(metric.metric.items()):
+                        labels.append(f"{k}={v}")
+                    metric_labels_str = "-".join(labels)
+                    metric_identifier = f"{payload.timestamp}-{metric.metric.get('__name__')}-{metric_labels_str}"
+
                     item = {
                         "cluster_id": payload.cluster_id,
+                        "metric_identifier": metric_identifier,
                         "timestamp": Decimal(str(payload.timestamp)),
                         "metric_name": metric.metric.get("__name__"),
                         "metric_labels": convert_floats_to_decimals(metric.metric),
