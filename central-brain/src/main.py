@@ -176,6 +176,7 @@ def detect_cpu_anomalies(metrics: List[Metric]) -> List[str]:
         logger.info(f"Calculated {len(rates)} CPU usage rates.")
 
         if not rates:
+            logger.info("No CPU usage rates calculated. Returning.")
             return []
 
         # Use 3-sigma to detect anomalies
