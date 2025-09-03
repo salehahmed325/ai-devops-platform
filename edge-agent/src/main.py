@@ -78,7 +78,7 @@ class EdgeAgent:
                 response = await client.post(
                     f"{CENTRAL_API_URL}/ingest",
                     json=data,
-                    headers={"X-API-KEY": API_KEY},
+                    headers={"X-API-KEY": API_KEY or ""},
                     timeout=60.0,
                 )
                 response.raise_for_status()  # Raise an exception for 4xx or 5xx status codes
@@ -110,21 +110,34 @@ class EdgeAgent:
 
                 # Send to central brain in batches
                 batch_size = 200
-                if not metrics:
-                    logger.warning("No metrics collected, skipping send.")
+                if (
+                    not metrics
+                    and not k8s_state.get("nodes")
+                    and not k8s_state.get("pods")
+                    and not k8s_state.get("deployments")
+                ):
+                    logger.warning("No metrics or K8s state collected, skipping send.")
                 else:
-                    for i in range(0, len(metrics), batch_size):
-                        batch = metrics[i : i + batch_size]
-                        payload = {
-                            "cluster_id": CLUSTER_ID,
-                            "metrics": batch,
-                            "kubernetes_state": k8s_state,
-                            "timestamp": time.time(),
-                        }
-                        logger.info(
-                            f"Sending batch of {len(batch)} metrics to central brain."
-                        )
-                        await self.send_to_central_brain(payload)
+                    payload = {
+                        "cluster_id": CLUSTER_ID,
+                        "metrics": metrics,
+                        "timestamp": time.time(),
+                    }
+                    if (
+                        k8s_state.get("nodes")
+                        or k8s_state.get("pods")
+                        or k8s_state.get("deployments")
+                    ):
+                        payload["kubernetes_state"] = k8s_state
+
+                    # Send batch to central brain
+                    # The batching logic for metrics is handled within collect_metrics if needed
+                    # For simplicity, sending the entire payload as one item for now.
+                    # If metrics list is very large, this might need re-evaluation.
+                    logger.info(
+                        f"Sending payload to central brain. Metrics: {len(metrics)}, K8s State: {bool(k8s_state.get('nodes') or k8s_state.get('pods') or k8s_state.get('deployments'))}"
+                    )
+                    await self.send_to_central_brain(payload)
 
                 # Wait for next collection
                 await asyncio.sleep(300)  # 5 minutes
