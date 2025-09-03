@@ -109,7 +109,7 @@ class EdgeAgent:
                 k8s_state = await self.kubernetes.get_cluster_state()
 
                 # Send to central brain in batches
-                batch_size = 200
+
                 if (
                     not metrics
                     and not k8s_state.get("nodes")
