@@ -107,7 +107,7 @@ async def get_api_key(api_key_header: str = Security(api_key_header)):
 
 
 # --- Anomaly Detection ---
-def detect_anomalies(metrics: List[Metric]) -> List[str]:
+def detect_up_anomalies(metrics: List[Metric]) -> List[str]:
     """A simple anomaly detection function using Isolation Forest on the 'up' metric."""
     anomalies = []
     try:
@@ -139,9 +139,65 @@ def detect_anomalies(metrics: List[Metric]) -> List[str]:
                 )
 
     except Exception as e:
-        logger.error(f"Anomaly detection failed: {e}")
+        logger.error(f"Anomaly detection for 'up' metric failed: {e}")
 
     return anomalies
+
+
+def detect_cpu_anomalies(metrics: List[Metric]) -> List[str]:
+    """Detects anomalies in CPU usage metrics."""
+    anomalies = []
+    try:
+        cpu_metrics = [
+            m
+            for m in metrics
+            if m.metric.get("__name__") == "node_cpu_seconds_total"
+            and m.metric.get("mode") == "idle"
+        ]
+
+        if len(cpu_metrics) < 2:
+            return []
+
+        # Calculate the rate of change for CPU usage
+        rates = []
+        for i in range(1, len(cpu_metrics)):
+            time_diff = float(cpu_metrics[i].value[0]) - float(
+                cpu_metrics[i - 1].value[0]
+            )
+            value_diff = float(cpu_metrics[i].value[1]) - float(
+                cpu_metrics[i - 1].value[1]
+            )
+            if time_diff > 0:
+                rates.append(value_diff / time_diff)
+
+        if not rates:
+            return []
+
+        # Use 3-sigma to detect anomalies
+        mean_rate = np.mean(rates)
+        std_dev_rate = np.std(rates)
+        threshold = mean_rate + 3 * std_dev_rate
+
+        for i, rate in enumerate(rates):
+            if rate > threshold:
+                metric = cpu_metrics[i + 1]
+                instance = metric.metric.get("instance", "unknown_instance")
+                anomalies.append(
+                    f"High CPU usage detected on instance '{instance}'. Rate: {rate:.2f}"
+                )
+
+    except Exception as e:
+        logger.error(f"CPU anomaly detection failed: {e}")
+
+    return anomalies
+
+
+def detect_anomalies(metrics: List[Metric]) -> List[str]:
+    """Detects anomalies in various metrics."""
+    all_anomalies = []
+    all_anomalies.extend(detect_up_anomalies(metrics))
+    all_anomalies.extend(detect_cpu_anomalies(metrics))
+    return all_anomalies
 
 
 # --- FastAPI App ---
