@@ -165,9 +165,29 @@ async def ingest_data(payload: IngestPayload, api_key: str = Depends(get_api_key
 
     # Store data in DynamoDB
     try:
-        item = convert_floats_to_decimals(payload.dict())
-        logger.debug(f"Item to be stored in DynamoDB: {item}")
-        table.put_item(Item=item)
+        # Use a batch writer to handle potentially large metric lists
+        with table.batch_writer() as batch:
+            # Store each metric as a separate item
+            for metric in payload.metrics:
+                item = {
+                    "cluster_id": payload.cluster_id,
+                    "timestamp": Decimal(str(payload.timestamp)),
+                    "metric_name": metric.metric.get("__name__"),
+                    "metric_labels": convert_floats_to_decimals(metric.metric),
+                    "metric_value": convert_floats_to_decimals(metric.value),
+                }
+                batch.put_item(Item=item)
+
+            # Store Kubernetes state as a separate item if it exists
+            if payload.kubernetes_state:
+                k8s_item = {
+                    "cluster_id": payload.cluster_id,
+                    "timestamp": Decimal(str(payload.timestamp)),
+                    "data_type": "kubernetes_state",
+                    "state": convert_floats_to_decimals(payload.kubernetes_state),
+                }
+                batch.put_item(Item=k8s_item)
+
         logger.info(
             f"Successfully stored data for cluster {payload.cluster_id} in DynamoDB."
         )
