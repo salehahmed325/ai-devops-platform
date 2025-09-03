@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 
 from decimal import Decimal
 import httpx
+import hashlib
 
 import boto3
 import numpy as np
@@ -28,8 +29,8 @@ logger = logging.getLogger(__name__)
 
 # --- DynamoDB Setup ---
 dynamodb = boto3.resource("dynamodb")
-table = dynamodb.Table(DYNAMODB_TABLE_NAME)
-alert_configs_table = dynamodb.Table(
+table = dynamodb.Table(DYNAMODB_TABLE_NAME)  # type: ignore
+alert_configs_table = dynamodb.Table(  # type: ignore
     os.getenv("DYNAMODB_ALERT_CONFIGS_TABLE_NAME", "ai-devops-platform-alert-configs")
 )
 
@@ -175,7 +176,8 @@ async def ingest_data(payload: IngestPayload, api_key: str = Depends(get_api_key
                     for k, v in sorted(metric.metric.items()):
                         labels.append(f"{k}={v}")
                     metric_labels_str = "-".join(labels)
-                    metric_identifier = f"{payload.timestamp}-{metric.metric.get('__name__')}-{metric_labels_str}"
+                    labels_hash = hashlib.sha256(metric_labels_str.encode()).hexdigest()
+                    metric_identifier = f"{payload.timestamp}-{metric.metric.get('__name__')}-{labels_hash}"
 
                     item = {
                         "cluster_id": payload.cluster_id,
