@@ -9,13 +9,17 @@
 
 ### a. `edge-agent`
 - **Purpose**: A Dockerized Python (FastAPI) application that is deployed on a target server.
-- **Function**: It queries a Prometheus instance to collect metrics, and forwards them to the `central-brain` in batches.
-- **Status**: **COMPLETE & WORKING**. The agent is containerized, and its CI/CD pipeline in `.github/workflows/edge-agent.yaml` automatically builds, tests, and pushes its image to both AWS ECR and Docker Hub. The data collection and batching mechanism has been debugged and is now working reliably.
+- **Function**: It queries a Prometheus instance to collect metrics, and forwards them to the `central-brain`.
+- **Status**: **WORKING & OPTIMIZED**. The agent is containerized, and its CI/CD pipeline in `.github/workflows/edge-agent.yaml` automatically builds, tests, and pushes its image to both AWS ECR and Docker Hub.
+    - **Data Collection Refinement**: The agent now collects a 5-minute range of data for each metric, providing the necessary data for rate calculations.
+    - **Conditional K8s State**: It conditionally collects and sends Kubernetes cluster state only if running within a K8s environment, preventing unnecessary empty data payloads.
+    - **Code Quality**: Pylance type warnings and Black formatting issues have been resolved.
 
 ### b. `central-brain`
 - **Purpose**: A Dockerized Python (FastAPI) application that serves as the AI/ML core.
-- **Function**: It exposes a secure `/ingest` endpoint to receive data from `edge-agent`s. It performs anomaly detection on the `up` metric, stores data persistently, and sends Telegram alerts for detected anomalies. It is set up for future expansion (e.g., more advanced AI/ML, other alerting channels).
-- **Status**: **DEPLOYED & RUNNING**. The application code is complete. The CI/CD pipeline in `.github/workflows/central-brain.yaml` is working. The infrastructure has been deployed to AWS via Terraform, and the service is running on ECS Fargate and is accessible via a public Application Load Balancer.
+- **Function**: It exposes a secure `/ingest` endpoint to receive data from `edge-agent`s. It performs anomaly detection on the `up` metric and CPU usage, stores data persistently, and sends Telegram alerts for detected anomalies. It is set up for future expansion (e.g., more advanced AI/ML, other alerting channels).
+- **Status**: **DEPLOYED & READY FOR ANALYSIS**. The application code is complete. The CI/CD pipeline in `.github/workflows/central-brain.yaml` is working. The infrastructure has been deployed to AWS via Terraform, and the service is running on ECS Fargate and is accessible via a public Application Load Balancer.
+    - **Payload Compatibility**: The `/ingest` endpoint has been updated to handle batch writes of metrics and the optional `kubernetes_state` field from the `edge-agent`.
 
 ### c. Infrastructure (Terraform)
 - **Provider**: AWS
@@ -36,33 +40,36 @@
 
 When you start our new session, paste the entire content of this file as your first message. Then, we can proceed with the following next steps.
 
-## 4. Session Summary (2025-09-02)
+## 4. Session Summary (2025-09-04)
 
-Today, we successfully debugged and fixed the end-to-end data pipeline. Here is a summary of the steps taken:
+Today, we focused on debugging the data pipeline and refining the anomaly detection capabilities:
 
-1.  **Initial Problem**: The `edge-agent` was not correctly collecting metrics from Prometheus due to a bug in `prometheus_helper.py`.
-2.  **Fix 1**: We corrected the `prometheus_helper.py` file to correctly handle the `httpx` client.
-3.  **New Problem**: The `edge-agent` was timing out when connecting to Prometheus. We discovered this was due to a networking issue between the Docker container and the host machine.
-4.  **Fix 2**: We configured the `edge-agent` to use `host.docker.internal` to connect to the host machine, and added the `--add-host` flag to the `docker run` command.
-5.  **New Problem**: The `edge-agent` was timing out when sending the large payload of metrics to the `central-brain`.
-6.  **Fix 3**: We implemented batching in the `edge-agent` to send the metrics in smaller chunks.
-7.  **New Problem**: The `central-brain` was still timing out because the batches were too large for DynamoDB's item size limit.
-8.  **Fix 4**: We reduced the batch size to a smaller number (200), which resolved the final issue.
+1.  **Problem**: The `central-brain` was failing to store data in DynamoDB due to the payload size exceeding the 400KB limit for a single item.
+2.  **Solution**: Modified the `central-brain/src/main.py` to process the incoming metrics in batches, storing each metric as a separate item in DynamoDB.
+3.  **Problem**: The `central-brain`'s ECS task execution role lacked the necessary IAM permission (`dynamodb:BatchWriteItem`) to perform the batch write operation.
+4.  **Solution**: Updated the IAM policy in `infrastructure/terraform/modules/iam/main.tf` to include the `dynamodb:BatchWriteItem` permission.
+5.  **Problem**: The `BatchWriteItem` operation was failing due to duplicate primary keys in the batch, as all metrics had the same `cluster_id` and `timestamp`.
+6.  **Solution**: Changed the primary key of the DynamoDB table to use a unique `metric_identifier` (a combination of timestamp, metric name, and a hash of the labels). This required recreating the DynamoDB table.
+7.  **Problem**: The `metric_identifier` was too long, exceeding the 1024-byte limit for a range key.
+8.  **Solution**: Used a SHA256 hash of the metric labels to create a fixed-size identifier.
+9.  **Feature**: Implemented a new anomaly detection function in `central-brain` to monitor CPU usage (`node_cpu_seconds_total` with `mode='user'`).
+10. **Feature**: Updated the `edge-agent` to collect the last 5 minutes of data for each metric, providing the necessary data for rate calculations.
+11. **Feature**: Added manual triggers (`workflow_dispatch`) to the `central-brain` and `edge-agent` CI/CD workflows to allow for manual deployments.
 
 **Current State:**
-*   **End-to-End Data Flow:** The `edge-agent` is now reliably collecting all metrics from Prometheus and sending them in batches to the `central-brain`. The `central-brain` is successfully ingesting this data and storing it in DynamoDB.
-*   **Alerting:** The basic alerting for the `up` metric is still functional.
+*   **Robust Data Pipeline:** The data pipeline is now stable and can handle large payloads from the `edge-agent`.
+*   **Enhanced Anomaly Detection:** The `central-brain` can now detect anomalies in both service availability (`up` metric) and CPU usage.
+*   **Flexible Workflows:** The CI/CD workflows for the `central-brain` and `edge-agent` can be triggered manually.
 
 ## 5. Next Steps
 
-The next major task is to leverage the rich dataset we are now collecting.
+The next major task is to continue refining the anomaly detection and improving the overall system.
 
-1.  **Refine Anomaly Detection in `central-brain`**:
-    *   **Explore the Data**: Analyze the metrics being stored in the `ai-devops-platform-data` DynamoDB table to identify which metrics are the best candidates for anomaly detection.
-    *   **Choose Models**: Select appropriate statistical methods or machine learning models for the chosen metrics.
-    *   **Implement**: Update the `detect_anomalies` function in `central-brain/src/main.py` to incorporate the new models.
+1.  **Refine CPU Anomaly Detection**:
+    *   **Analyze the Data**: Analyze the CPU usage data to determine if the current 3-sigma model is effective or if it needs to be adjusted.
+    *   **Consider Other Metrics**: Explore other metrics that would be good candidates for anomaly detection, such as memory usage, disk I/O, and network traffic.
 2.  **Review and Refine Alerting**:
-    *   Consider adding more sophisticated alert templating to provide more context in the alerts.
-    *   Explore integrating other alerting channels (e.g., email via SNS, PagerDuty, Slack).
+    *   **Improve Alert Messages**: Make the alert messages more informative by including more context about the anomaly.
+    *   **Integrate Other Channels**: Explore integrating other alerting channels like email or PagerDuty.
 3.  **Develop a User Interface/Dashboard**:
-    *   Create a frontend application to visualize ingested data, anomalies, and alert configurations.
+    *   Create a frontend application to visualize the ingested data, anomalies, and alert configurations.
