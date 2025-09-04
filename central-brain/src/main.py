@@ -149,10 +149,7 @@ def detect_cpu_anomalies(metrics: List[Metric]) -> List[str]:
     anomalies = []
     try:
         cpu_metrics = [
-            m
-            for m in metrics
-            if m.metric.get("__name__") == "node_cpu_seconds_total"
-            and m.metric.get("mode") == "user"
+            m for m in metrics if m.metric.get("__name__") == "node_cpu_seconds_total"
         ]
         logger.info(
             f"Found {len(cpu_metrics)} 'node_cpu_seconds_total' metrics with mode 'user'."
