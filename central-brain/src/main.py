@@ -226,9 +226,11 @@ def detect_cpu_anomalies(metrics: List[Metric]) -> List[str]:
             )
 
             if time_diff > 0 and value_diff >= 0:
-                # Rate is CPU seconds per second. Divide by num_cores to get utilization per core,
+                # Rate is CPU seconds per second. Divide by 10^9 (for nanoseconds) and num_cores
                 # then multiply by 100 for percentage.
-                percentage_rate = (value_diff / time_diff) / num_cores * 100
+                percentage_rate = (
+                    (value_diff / time_diff) / 1_000_000_000 / num_cores * 100
+                )
                 rates.append(percentage_rate)
 
         logger.info(f"Calculated {len(rates)} CPU usage percentages.")
