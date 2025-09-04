@@ -294,9 +294,9 @@ async def detect_cpu_anomalies(
                 )
 
                 if time_diff > 0 and value_diff >= 0:
-                    percentage_rate = (
-                        (value_diff / time_diff) / 1_000_000_000 / num_cores * 100
-                    )
+                    # Rate is CPU seconds per second. Divide by num_cores to get utilization per core,
+                    # then multiply by 100 for percentage.
+                    percentage_rate = (value_diff / time_diff) / num_cores * 100
                     rates.append(percentage_rate)
 
             logger.info(
