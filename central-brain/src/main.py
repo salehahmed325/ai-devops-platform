@@ -198,8 +198,9 @@ def detect_cpu_anomalies(metrics: List[Metric]) -> List[str]:
                 # The rate at index `i` corresponds to the change between metric `i` and `i+1`
                 metric = cpu_metrics[i + 1]
                 instance = metric.metric.get("instance", "unknown_instance")
+                job = metric.metric.get("job", "unknown_job")
                 anomalies.append(
-                    f"High CPU usage detected on instance '{instance}'. Rate: {rates[i]:.2f}"
+                    f"High CPU usage detected on job='{job}', instance='{instance}'. Rate: {rates[i]:.2f}"
                 )
 
     except Exception as e:
