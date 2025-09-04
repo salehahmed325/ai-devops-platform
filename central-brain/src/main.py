@@ -164,6 +164,9 @@ def detect_cpu_anomalies(metrics: List[Metric]) -> List[str]:
             logger.info("Not enough CPU metrics to detect anomalies. Returning.")
             return []
 
+        # Sort metrics by timestamp to ensure correct rate calculation
+        cpu_metrics.sort(key=lambda m: float(m.value[0]))
+
         # Calculate the rate of change for CPU usage
         rates = []
         for i in range(1, len(cpu_metrics)):
