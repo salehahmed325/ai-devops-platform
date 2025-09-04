@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import logging
 from typing import Any, Dict, List, Optional
@@ -7,6 +9,7 @@ import httpx
 import hashlib
 
 import boto3
+from boto3.dynamodb.conditions import Key, Attr
 import numpy as np
 from fastapi import Depends, FastAPI, HTTPException, Security
 from fastapi.security.api_key import APIKeyHeader
@@ -43,6 +46,37 @@ def convert_floats_to_decimals(obj):
     if isinstance(obj, list):
         return [convert_floats_to_decimals(elem) for elem in obj]
     return obj
+
+
+async def get_historical_cpu_metric(
+    cluster_id: str, instance: str, job: str, before_timestamp: float
+) -> Optional[Metric]:
+    """Retrieves the most recent node_cpu_seconds_total metric before a given timestamp for a specific instance/job."""
+    try:
+        response = table.query(
+            KeyConditionExpression=Key("cluster_id").eq(cluster_id),
+            FilterExpression=(
+                Attr("metric_name").eq("node_cpu_seconds_total")
+                & Attr("metric_labels.instance").eq(instance)
+                & Attr("metric_labels.job").eq(job)
+                & Attr("timestamp").lt(Decimal(str(before_timestamp)))
+            ),
+            ScanIndexForward=False,  # Descending order by sort key (timestamp)
+            Limit=1,
+        )
+        items = response.get("Items", [])
+        if items:
+            item = items[0]
+            # Reconstruct Metric object from stored DynamoDB item
+            return Metric(
+                metric=item["metric_labels"],
+                value=[float(item["metric_value"][0]), item["metric_value"][1]],
+            )
+    except Exception as e:
+        logger.error(
+            f"Error retrieving historical CPU metric for {instance}/{job}: {e}"
+        )
+    return None
 
 
 # --- Telegram Alerting ---
@@ -144,7 +178,9 @@ def detect_up_anomalies(metrics: List[Metric]) -> List[str]:
     return anomalies
 
 
-def detect_cpu_anomalies(metrics: List[Metric]) -> List[str]:
+async def detect_cpu_anomalies(
+    metrics: List[Metric], payload_cluster_id: str
+) -> List[str]:
     """Detects anomalies in CPU usage metrics."""
     anomalies = []
     try:
@@ -159,17 +195,37 @@ def detect_cpu_anomalies(metrics: List[Metric]) -> List[str]:
                     grouped_cpu_metrics[key] = []
                 grouped_cpu_metrics[key].append(m)
 
-        for (instance, job), instance_cpu_metrics in grouped_cpu_metrics.items():
+        for (
+            instance,
+            job,
+        ), instance_cpu_metrics_current in grouped_cpu_metrics.items():
             logger.info(f"Processing CPU metrics for instance: {instance}, job: {job}")
 
-            if len(instance_cpu_metrics) < 2:
+            # Get the earliest timestamp from the current batch to query historical data before it
+            earliest_current_timestamp = float("inf")
+            if instance_cpu_metrics_current:
+                earliest_current_timestamp = float(
+                    instance_cpu_metrics_current[0].value[0]
+                )
+
+            # Retrieve historical data from DynamoDB
+            historical_metric = await get_historical_cpu_metric(
+                payload_cluster_id, instance, job, earliest_current_timestamp
+            )
+
+            # Combine current and historical data
+            combined_cpu_metrics = list(instance_cpu_metrics_current)
+            if historical_metric:
+                combined_cpu_metrics.append(historical_metric)
+
+            if len(combined_cpu_metrics) < 2:
                 logger.info(
                     f"Not enough CPU metrics for {instance}/{job} to detect anomalies. Skipping."
                 )
                 continue
 
-            # Sort metrics by timestamp to ensure correct rate calculation
-            instance_cpu_metrics.sort(key=lambda m: float(m.value[0]))
+            # Sort combined metrics by timestamp to ensure correct rate calculation
+            combined_cpu_metrics.sort(key=lambda m: float(m.value[0]))
 
             num_cores = 1  # Default to 1 if no core information is found
 
@@ -194,9 +250,9 @@ def detect_cpu_anomalies(metrics: List[Metric]) -> List[str]:
             if (
                 num_cores == 1
             ):  # Still default, meaning machine_cpu_cores wasn't used or found for this instance
-                if instance_cpu_metrics:
+                if combined_cpu_metrics:
                     unique_cpus = set()
-                    for m in instance_cpu_metrics:
+                    for m in combined_cpu_metrics:
                         if m.metric.get("cpu") is not None:
                             unique_cpus.add(m.metric.get("cpu"))
                     if unique_cpus:
@@ -211,7 +267,7 @@ def detect_cpu_anomalies(metrics: List[Metric]) -> List[str]:
 
             # Aggregate CPU usage per timestamp across all cores for the instance
             aggregated_cpu_data = {}
-            for m in instance_cpu_metrics:
+            for m in combined_cpu_metrics:
                 timestamp = m.value[0]
                 value = float(m.value[1])
                 aggregated_cpu_data.setdefault(timestamp, 0.0)
@@ -280,11 +336,11 @@ def detect_cpu_anomalies(metrics: List[Metric]) -> List[str]:
     return anomalies
 
 
-def detect_anomalies(metrics: List[Metric]) -> List[str]:
+async def detect_anomalies(metrics: List[Metric], cluster_id: str) -> List[str]:
     """Detects anomalies in various metrics."""
     all_anomalies = []
     all_anomalies.extend(detect_up_anomalies(metrics))
-    all_anomalies.extend(detect_cpu_anomalies(metrics))
+    all_anomalies.extend(await detect_cpu_anomalies(metrics, cluster_id))
     return all_anomalies
 
 
@@ -353,7 +409,7 @@ async def ingest_data(payload: IngestPayload, api_key: str = Depends(get_api_key
             )
 
         # Perform anomaly detection
-        anomalies = detect_anomalies(payload.metrics)
+        anomalies = await detect_anomalies(payload.metrics, payload.cluster_id)
         if anomalies:
             alert_manager = AlertManager(alert_configs_table)
             try:
