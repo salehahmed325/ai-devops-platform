@@ -28,9 +28,19 @@ async def get_selected_metrics(prometheus_url: str, metrics: list[str]) -> list:
                 response.raise_for_status()
 
                 result = response.json()["data"]["result"]
-                if result:
-                    all_metrics.extend(result)
-                else:
+                # Instead of returning the full range vector, we process it
+                # to return a list of single, most recent data points.
+                for series in result:
+                    if series.get("values"):
+                        # The last item in the values list is the most recent one
+                        latest_value = series["values"][-1]
+                        all_metrics.append(
+                            {
+                                "metric": series["metric"],
+                                "value": latest_value,
+                            }
+                        )
+                if not result:
                     logger.warning(f"No data returned for metric: {metric_name}")
             except httpx.HTTPStatusError as e:
                 logger.error(
