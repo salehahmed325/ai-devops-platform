@@ -176,7 +176,7 @@ def detect_cpu_anomalies(metrics: List[Metric]) -> List[str]:
             value_diff = float(cpu_metrics[i].value[1]) - float(
                 cpu_metrics[i - 1].value[1]
             )
-            if time_diff > 0:
+            if time_diff > 0 and value_diff >= 0:
                 rates.append(value_diff / time_diff)
 
         logger.info(f"Calculated {len(rates)} CPU usage rates.")
