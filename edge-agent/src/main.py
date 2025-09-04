@@ -39,7 +39,7 @@ TARGET_METRICS = [
     "container_memory_usage_bytes",
     "container_network_receive_bytes_total",
     "container_network_transmit_bytes_total",
-    "node_cpu_info",
+    "machine_cpu_cores",
 ]
 
 

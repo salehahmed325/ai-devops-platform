@@ -167,20 +167,43 @@ def detect_cpu_anomalies(metrics: List[Metric]) -> List[str]:
         # Sort metrics by timestamp to ensure correct rate calculation
         cpu_metrics.sort(key=lambda m: float(m.value[0]))
 
-        # Find the number of CPU cores for this instance
-        num_cores = 1  # Default to 1 if not found
-        for m in metrics:
-            if m.metric.get("__name__") == "node_cpu_info":
-                # Assuming node_cpu_info has a 'cores' label
-                cores_str = m.metric.get("cores")
-                if cores_str:
-                    try:
-                        num_cores = int(cores_str)
-                        break
-                    except ValueError:
-                        logger.warning(f"Could not parse cores value: {cores_str}")
+        num_cores = 1  # Default to 1 if no core information is found
 
-        logger.info(f"Detected {num_cores} CPU cores for this instance.")
+        # First, try to get the number of cores from 'machine_cpu_cores' metric
+        for m in metrics:
+            if m.metric.get("__name__") == "machine_cpu_cores":
+                try:
+                    num_cores = int(float(m.value[1]))
+                    logger.info(
+                        f"Detected {num_cores} CPU cores from machine_cpu_cores."
+                    )
+                    break  # Found it, no need to check other methods
+                except (ValueError, TypeError):
+                    logger.warning(
+                        f"Could not parse machine_cpu_cores value: {m.value[1]}"
+                    )
+
+        # If machine_cpu_cores was not found or parsed, infer from node_cpu_seconds_total
+        if num_cores == 1:  # Still default, meaning machine_cpu_cores wasn't used
+            if cpu_metrics:
+                # Get the instance label from the first cpu_metric (assuming all are from the same instance)
+                instance_label = cpu_metrics[0].metric.get("instance")
+                if instance_label:
+                    unique_cpus = set()
+                    for m in metrics:
+                        if (
+                            m.metric.get("__name__") == "node_cpu_seconds_total"
+                            and m.metric.get("instance") == instance_label
+                            and m.metric.get("cpu") is not None
+                        ):
+                            unique_cpus.add(m.metric.get("cpu"))
+                    if unique_cpus:
+                        num_cores = len(unique_cpus)
+                        logger.info(
+                            f"Inferred {num_cores} CPU cores from node_cpu_seconds_total."
+                        )
+
+        logger.info(f"Final CPU cores used for calculation: {num_cores}")
 
         # Calculate the rate of change for CPU usage
         rates = []
