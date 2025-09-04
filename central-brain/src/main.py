@@ -232,6 +232,7 @@ def detect_cpu_anomalies(metrics: List[Metric]) -> List[str]:
                 rates.append(percentage_rate)
 
         logger.info(f"Calculated {len(rates)} CPU usage percentages.")
+        logger.debug(f"CPU usage percentages (rates): {rates}")
 
         if not rates:
             logger.info("No valid CPU usage percentages calculated. Returning.")
@@ -239,6 +240,7 @@ def detect_cpu_anomalies(metrics: List[Metric]) -> List[str]:
 
         # Use Isolation Forest to detect anomalies in the rates
         X = np.array(rates).reshape(-1, 1)
+        logger.debug(f"Isolation Forest input (X): {X}")
         clf = IsolationForest(contamination="auto", random_state=42)
         preds = clf.fit_predict(X)
 
