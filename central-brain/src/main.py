@@ -167,6 +167,21 @@ def detect_cpu_anomalies(metrics: List[Metric]) -> List[str]:
         # Sort metrics by timestamp to ensure correct rate calculation
         cpu_metrics.sort(key=lambda m: float(m.value[0]))
 
+        # Find the number of CPU cores for this instance
+        num_cores = 1  # Default to 1 if not found
+        for m in metrics:
+            if m.metric.get("__name__") == "node_cpu_info":
+                # Assuming node_cpu_info has a 'cores' label
+                cores_str = m.metric.get("cores")
+                if cores_str:
+                    try:
+                        num_cores = int(cores_str)
+                        break
+                    except ValueError:
+                        logger.warning(f"Could not parse cores value: {cores_str}")
+
+        logger.info(f"Detected {num_cores} CPU cores for this instance.")
+
         # Calculate the rate of change for CPU usage
         rates = []
         for i in range(1, len(cpu_metrics)):
@@ -177,7 +192,9 @@ def detect_cpu_anomalies(metrics: List[Metric]) -> List[str]:
                 cpu_metrics[i - 1].value[1]
             )
             if time_diff > 0 and value_diff >= 0:
-                rates.append(value_diff / time_diff)
+                # Normalize rate by number of cores to get a percentage
+                percentage_rate = (value_diff / time_diff) / num_cores * 100
+                rates.append(percentage_rate)
 
         logger.info(f"Calculated {len(rates)} CPU usage rates.")
 
@@ -200,7 +217,7 @@ def detect_cpu_anomalies(metrics: List[Metric]) -> List[str]:
                 instance = metric.metric.get("instance", "unknown_instance")
                 job = metric.metric.get("job", "unknown_job")
                 anomalies.append(
-                    f"High CPU usage detected on job='{job}', instance='{instance}'. Rate: {rates[i]:.2f}"
+                    f"High CPU usage detected on job='{job}', instance='{instance}'. Usage: {rates[i]:.2f}%"
                 )
 
     except Exception as e:
