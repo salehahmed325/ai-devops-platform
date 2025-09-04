@@ -14,12 +14,20 @@
     - **Data Collection Refinement**: The agent now collects a 5-minute range of data for each metric, providing the necessary data for rate calculations.
     - **Conditional K8s State**: It conditionally collects and sends Kubernetes cluster state only if running within a K8s environment, preventing unnecessary empty data payloads.
     - **Code Quality**: Pylance type warnings and Black formatting issues have been resolved.
+    - **CPU Core Collection**: Modified to collect `machine_cpu_cores` (and `node_cpu_info` was reverted).
 
 ### b. `central-brain`
 - **Purpose**: A Dockerized Python (FastAPI) application that serves as the AI/ML core.
 - **Function**: It exposes a secure `/ingest` endpoint to receive data from `edge-agent`s. It performs anomaly detection on the `up` metric and CPU usage, stores data persistently, and sends Telegram alerts for detected anomalies. It is set up for future expansion (e.g., more advanced AI/ML, other alerting channels).
-- **Status**: **DEPLOYED & READY FOR ANALYSIS**. The application code is complete. The CI/CD pipeline in `.github/workflows/central-brain.yaml` is working. The infrastructure has been deployed to AWS via Terraform, and the service is running on ECS Fargate and is accessible via a public Application Load Balancer.
-    - **Payload Compatibility**: The `/ingest` endpoint has been updated to handle batch writes of metrics and the optional `kubernetes_state` field from the `edge-agent`.
+- **Status**: **DEPLOYED & READY FOR ANALYSIS** (with ongoing debugging).
+    - **CPU Percentage Calculation**: Refactored `detect_cpu_anomalies` to:
+        - Process CPU metrics per job/instance.
+        - Retrieve historical `node_cpu_seconds_total` data from DynamoDB using a Global Secondary Index (GSI).
+        - Calculate CPU usage percentages based on total CPU seconds (all modes) and number of cores.
+        - **Current Observation**: Calculated percentages are still very low (e.g., 0.000003%), suggesting instances are genuinely idle or `node_cpu_seconds_total` is not behaving as expected for busy CPU.
+    - **IAM Permissions**: `dynamodb:Query` permission added to `AIDevOpsPlatformPolicy` for the `ai-devops-platform-data` table and its GSI.
+    - **Pylance Errors**: All identified Pylance errors have been resolved.
+    - **Telegram Alert Token**: `TELEGRAM_BOT_TOKEN` warning persists (needs to be set in ECS task definition environment variables).
 
 ### c. Infrastructure (Terraform)
 - **Provider**: AWS
@@ -30,11 +38,21 @@
     - **ECR Repositories** for both `edge-agent` and `central-brain` images.
     - An **S3 Bucket** (`ai-devops-platform-models-...`) for future AI/ML model storage.
     - Two **DynamoDB Tables**: `ai-devops-platform-data` for ingested metrics and `ai-devops-platform-alert-configs` for storing alert recipient configurations (e.g., Telegram chat IDs).
+        - `ai-devops-platform-data`: Now includes `MetricName-InstanceJob-index` GSI for efficient historical data retrieval.
     - A comprehensive **IAM Policy** (`AIDevOpsPlatformPolicy`) providing necessary permissions, including DynamoDB read/write and SNS publish (for future alerting channels).
     - An **ECS Cluster** (`ai-devops-platform-cluster-dev`).
     - An **Application Load Balancer** to expose the `central-brain` service.
     - An **ECS Service** (`ai-devops-platform-service-dev`) running the `central-brain` container with `LOG_LEVEL=DEBUG` and `TELEGRAM_BOT_TOKEN` environment variables.
-- **Status**: **COMPLETE**. The infrastructure has been successfully deployed via the workflow in `.github/workflows/terraform.yaml`.
+- **Status**: **COMPLETE** (with recent updates applied).
+    - `dynamodb/main.tf`: `MetricName-InstanceJob-index` GSI added to `ai-devops-platform-data` table.
+    - `iam/main.tf`: `dynamodb:Query` permission added for the GSI.
+    - `ecs/main.tf`: `force_new_deployment = true` added to ECS service.
+
+### d. CI/CD
+- **Workflows**: GitHub Actions workflows (`central-brain.yaml`, `edge-agent.yaml`, `terraform.yaml`).
+- **Status**: **FUNCTIONAL** (with recent fixes).
+    - `central-brain.yaml`: `central-brain-image-tag` artifact now uploaded unconditionally on successful build.
+    - `terraform.yaml`: `Read Image Tag` step made more robust for `workflow_dispatch` runs.
 
 ## 3. How to Resume
 
@@ -55,21 +73,25 @@ Today, we focused on debugging the data pipeline and refining the anomaly detect
 9.  **Feature**: Implemented a new anomaly detection function in `central-brain` to monitor CPU usage (`node_cpu_seconds_total` with `mode='user'`).
 10. **Feature**: Updated the `edge-agent` to collect the last 5 minutes of data for each metric, providing the necessary data for rate calculations.
 11. **Feature**: Added manual triggers (`workflow_dispatch`) to the `central-brain` and `edge-agent` CI/CD workflows to allow for manual deployments.
-
-**Current State:**
-*   **Robust Data Pipeline:** The data pipeline is now stable and can handle large payloads from the `edge-agent`.
-*   **Enhanced Anomaly Detection:** The `central-brain` can now detect anomalies in both service availability (`up` metric) and CPU usage.
-*   **Flexible Workflows:** The CI/CD workflows for the `central-brain` and `edge-agent` can be triggered manually.
+12. **Problem**: CPU anomaly alerts showed negative rates due to unsorted metrics.
+13. **Solution**: Sorted CPU metrics by timestamp before rate calculation in `central-brain/src/main.py`.
+14. **Problem**: CPU anomaly detection was not sensitive enough (3-sigma model).
+15. **Solution**: Replaced 3-sigma with `IsolationForest` for CPU anomaly detection in `central-brain/src/main.py`.
+16. **Problem**: CPU anomaly alerts showed negative rates due to counter resets/decreases.
+17. **Solution**: Filtered out negative `value_diff` in CPU rate calculation in `central-brain/src/main.py`.
+18. **Problem**: CPU anomaly alerts lacked job name and percentage display.
+19. **Solution**: Included job name and converted CPU usage to percentage in `central-brain/src/main.py`.
+20. **Problem**: CPU percentage calculation was wildly inaccurate (millions of percent).
+21. **Solution**: Corrected unit conversion for `node_cpu_seconds_total` (removed erroneous division by 10^9) in `central-brain/src/main.py`.
+22. **Problem**: `central-brain` could not retrieve historical CPU data from DynamoDB due to missing `dynamodb:Query` permission on the GSI.
+23. **Solution**: Added `dynamodb:Query` permission to the IAM policy for the GSI in `infrastructure/terraform/modules/iam/main.tf`.
+24. **Problem**: `terraform.yaml` workflow failed during manual runs due to missing artifact.
+25. **Solution**: Made `Read Image Tag` step in `terraform.yaml` more robust by defaulting to `latest` if artifact is not found.
+26. **Problem**: `central-brain-image-tag` artifact not consistently uploaded.
+27. **Solution**: Removed restrictive `if` condition from `Upload Image Tag Artifact` step in `central-brain.yaml`.
 
 ## 5. Next Steps
 
-The next major task is to continue refining the anomaly detection and improving the overall system.
-
-1.  **Refine CPU Anomaly Detection**:
-    *   **Analyze the Data**: Analyze the CPU usage data to determine if the current 3-sigma model is effective or if it needs to be adjusted.
-    *   **Consider Other Metrics**: Explore other metrics that would be good candidates for anomaly detection, such as memory usage, disk I/O, and network traffic.
-2.  **Review and Refine Alerting**:
-    *   **Improve Alert Messages**: Make the alert messages more informative by including more context about the anomaly.
-    *   **Integrate Other Channels**: Explore integrating other alerting channels like email or PagerDuty.
-3.  **Develop a User Interface/Dashboard**:
-    *   Create a frontend application to visualize the ingested data, anomalies, and alert configurations.
+1.  **Verify CPU Percentage Accuracy**: Confirm that the calculated CPU usage percentages in the `central-brain` logs are now realistic (between 0-100%).
+2.  **Test Anomaly Detection**: Generate actual CPU load on an instance to verify that the `central-brain` correctly detects high CPU usage and sends alerts.
+3.  **Address `TELEGRAM_BOT_TOKEN` Warning**: Ensure the `TELEGRAM_BOT_TOKEN` environment variable is correctly set in the ECS task definition for the `central-brain` service.
