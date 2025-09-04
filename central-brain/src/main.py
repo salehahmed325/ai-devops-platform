@@ -185,26 +185,26 @@ def detect_cpu_anomalies(metrics: List[Metric]) -> List[str]:
             logger.info("No CPU usage rates calculated. Returning.")
             return []
 
-        # Use 3-sigma to detect anomalies
-        mean_rate = np.mean(rates)
-        std_dev_rate = np.std(rates)
-        threshold = mean_rate + 3 * std_dev_rate
-        logger.info(
-            f"CPU anomaly detection threshold: {threshold:.2f} (mean: {mean_rate:.2f}, std_dev: {std_dev_rate:.2f})"
-        )
+        # Use Isolation Forest to detect anomalies in the rates
+        X = np.array(rates).reshape(-1, 1)
+        clf = IsolationForest(contamination="auto", random_state=42)
+        preds = clf.fit_predict(X)
 
-        for i, rate in enumerate(rates):
-            if rate > threshold:
+        logger.info(f"Finished CPU anomaly detection. Predictions: {preds}")
+
+        # Find anomalies (-1 indicates an anomaly)
+        for i, pred in enumerate(preds):
+            if pred == -1:
+                # The rate at index `i` corresponds to the change between metric `i` and `i+1`
                 metric = cpu_metrics[i + 1]
                 instance = metric.metric.get("instance", "unknown_instance")
                 anomalies.append(
-                    f"High CPU usage detected on instance '{instance}'. Rate: {rate:.2f}"
+                    f"High CPU usage detected on instance '{instance}'. Rate: {rates[i]:.2f}"
                 )
 
     except Exception as e:
         logger.error(f"CPU anomaly detection failed: {e}")
 
-    logger.info("Finished CPU anomaly detection.")
     return anomalies
 
 
