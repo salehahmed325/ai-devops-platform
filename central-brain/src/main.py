@@ -148,130 +148,132 @@ def detect_cpu_anomalies(metrics: List[Metric]) -> List[str]:
     """Detects anomalies in CPU usage metrics."""
     anomalies = []
     try:
-        cpu_metrics = [
-            m for m in metrics if m.metric.get("__name__") == "node_cpu_seconds_total"
-        ]
-        logger.info(
-            f"Found {len(cpu_metrics)} 'node_cpu_seconds_total' metrics with mode 'user'."
-        )
-        for m in cpu_metrics:
-            logger.info(f"  - Timestamp: {m.value[0]}")
-
-        # Sort metrics by timestamp to ensure correct rate calculation
-        cpu_metrics.sort(key=lambda m: float(m.value[0]))
-
-        num_cores = 1  # Default to 1 if no core information is found
-
-        # First, try to get the number of cores from 'machine_cpu_cores' metric
+        # Group cpu_metrics by instance and job
+        grouped_cpu_metrics = {}
         for m in metrics:
-            if m.metric.get("__name__") == "machine_cpu_cores":
-                try:
-                    num_cores = int(float(m.value[1]))
-                    logger.info(
-                        f"Detected {num_cores} CPU cores from machine_cpu_cores."
-                    )
-                    break  # Found it, no need to check other methods
-                except (ValueError, TypeError):
-                    logger.warning(
-                        f"Could not parse machine_cpu_cores value: {m.value[1]}"
-                    )
+            if m.metric.get("__name__") == "node_cpu_seconds_total":
+                instance_key = m.metric.get("instance", "unknown_instance")
+                job_key = m.metric.get("job", "unknown_job")
+                key = (instance_key, job_key)
+                if key not in grouped_cpu_metrics:
+                    grouped_cpu_metrics[key] = []
+                grouped_cpu_metrics[key].append(m)
 
-        # If machine_cpu_cores was not found or parsed, infer from node_cpu_seconds_total
-        if num_cores == 1:  # Still default, meaning machine_cpu_cores wasn't used
-            if cpu_metrics:
-                # Get the instance label from the first cpu_metric (assuming all are from the same instance)
-                instance_label = cpu_metrics[0].metric.get("instance")
-                if instance_label:
+        for (instance, job), instance_cpu_metrics in grouped_cpu_metrics.items():
+            logger.info(f"Processing CPU metrics for instance: {instance}, job: {job}")
+
+            if len(instance_cpu_metrics) < 2:
+                logger.info(
+                    f"Not enough CPU metrics for {instance}/{job} to detect anomalies. Skipping."
+                )
+                continue
+
+            # Sort metrics by timestamp to ensure correct rate calculation
+            instance_cpu_metrics.sort(key=lambda m: float(m.value[0]))
+
+            num_cores = 1  # Default to 1 if no core information is found
+
+            # First, try to get the number of cores from 'machine_cpu_cores' metric for this instance
+            for m in metrics:
+                if (
+                    m.metric.get("__name__") == "machine_cpu_cores"
+                    and m.metric.get("instance") == instance
+                ):
+                    try:
+                        num_cores = int(float(m.value[1]))
+                        logger.info(
+                            f"Detected {num_cores} CPU cores from machine_cpu_cores for {instance}."
+                        )
+                        break  # Found it, no need to check other methods
+                    except (ValueError, TypeError):
+                        logger.warning(
+                            f"Could not parse machine_cpu_cores value for {instance}: {m.value[1]}"
+                        )
+
+            # If machine_cpu_cores was not found or parsed, infer from node_cpu_seconds_total
+            if (
+                num_cores == 1
+            ):  # Still default, meaning machine_cpu_cores wasn't used or found for this instance
+                if instance_cpu_metrics:
                     unique_cpus = set()
-                    for m in metrics:
-                        if (
-                            m.metric.get("__name__") == "node_cpu_seconds_total"
-                            and m.metric.get("instance") == instance_label
-                            and m.metric.get("cpu") is not None
-                        ):
+                    for m in instance_cpu_metrics:
+                        if m.metric.get("cpu") is not None:
                             unique_cpus.add(m.metric.get("cpu"))
                     if unique_cpus:
                         num_cores = len(unique_cpus)
                         logger.info(
-                            f"Inferred {num_cores} CPU cores from node_cpu_seconds_total."
+                            f"Inferred {num_cores} CPU cores from node_cpu_seconds_total for {instance}."
                         )
 
-        logger.info(f"Final CPU cores used for calculation: {num_cores}")
-
-        # Aggregate CPU usage per timestamp across all cores for the instance
-        # This creates a single time series for total user CPU seconds for the instance
-        aggregated_cpu_data = {}
-        for m in cpu_metrics:
-            timestamp = m.value[0]
-            value = float(m.value[1])
-            aggregated_cpu_data.setdefault(timestamp, 0.0)
-            aggregated_cpu_data[timestamp] += value
-
-        # Sort the aggregated data by timestamp
-        sorted_aggregated_cpu_data = sorted(aggregated_cpu_data.items())
-
-        # Calculate the rate of change for the aggregated CPU usage
-        rates = []
-        # Ensure there are at least two data points to calculate a rate
-        if len(sorted_aggregated_cpu_data) < 2:
-            logger.info("Not enough aggregated CPU data to calculate rates. Returning.")
-            return []
-
-        for i in range(1, len(sorted_aggregated_cpu_data)):
-            time_diff = (
-                sorted_aggregated_cpu_data[i][0] - sorted_aggregated_cpu_data[i - 1][0]
-            )
-            value_diff = (
-                sorted_aggregated_cpu_data[i][1] - sorted_aggregated_cpu_data[i - 1][1]
+            logger.info(
+                f"Final CPU cores used for calculation for {instance}/{job}: {num_cores}"
             )
 
-            if time_diff > 0 and value_diff >= 0:
-                # Rate is CPU seconds per second. Divide by 10^9 (for nanoseconds) and num_cores
-                # then multiply by 100 for percentage.
-                percentage_rate = (
-                    (value_diff / time_diff) / 1_000_000_000 / num_cores * 100
+            # Aggregate CPU usage per timestamp across all cores for the instance
+            aggregated_cpu_data = {}
+            for m in instance_cpu_metrics:
+                timestamp = m.value[0]
+                value = float(m.value[1])
+                aggregated_cpu_data.setdefault(timestamp, 0.0)
+                aggregated_cpu_data[timestamp] += value
+
+            # Sort the aggregated data by timestamp
+            sorted_aggregated_cpu_data = sorted(aggregated_cpu_data.items())
+
+            # Calculate the rate of change for the aggregated CPU usage
+            rates = []
+            if len(sorted_aggregated_cpu_data) < 2:
+                logger.info(
+                    f"Not enough aggregated CPU data for {instance}/{job} to calculate rates. Skipping."
                 )
-                rates.append(percentage_rate)
+                continue
 
-        logger.info(f"Calculated {len(rates)} CPU usage percentages.")
-        logger.debug(f"CPU usage percentages (rates): {rates}")
-
-        if not rates:
-            logger.info("No valid CPU usage percentages calculated. Returning.")
-            return []
-
-        # Use Isolation Forest to detect anomalies in the rates
-        X = np.array(rates).reshape(-1, 1)
-        logger.debug(f"Isolation Forest input (X): {X}")
-        clf = IsolationForest(contamination="auto", random_state=42)
-        preds = clf.fit_predict(X)
-
-        logger.info(f"Finished CPU anomaly detection. Predictions: {preds}")
-
-        # Find anomalies (-1 indicates an anomaly)
-        # The index `i` here refers to the index in the `rates` list.
-        # The corresponding metric for the anomaly is the second point used to calculate the rate.
-        for i, pred in enumerate(preds):
-            if pred == -1:
-                # Get the timestamp of the second point used for this rate calculation
-                anomaly_timestamp = sorted_aggregated_cpu_data[i + 1][0]
-                # Find a representative metric for this timestamp to get job and instance
-                # This assumes that all cpu_metrics for a given instance share the same job/instance labels
-                representative_metric = next(
-                    (m for m in cpu_metrics if m.value[0] == anomaly_timestamp), None
+            for i in range(1, len(sorted_aggregated_cpu_data)):
+                time_diff = (
+                    sorted_aggregated_cpu_data[i][0]
+                    - sorted_aggregated_cpu_data[i - 1][0]
+                )
+                value_diff = (
+                    sorted_aggregated_cpu_data[i][1]
+                    - sorted_aggregated_cpu_data[i - 1][1]
                 )
 
-                if representative_metric:
-                    instance = representative_metric.metric.get(
-                        "instance", "unknown_instance"
+                if time_diff > 0 and value_diff >= 0:
+                    percentage_rate = (
+                        (value_diff / time_diff) / 1_000_000_000 / num_cores * 100
                     )
-                    job = representative_metric.metric.get("job", "unknown_job")
+                    rates.append(percentage_rate)
+
+            logger.info(
+                f"Calculated {len(rates)} CPU usage percentages for {instance}/{job}."
+            )
+            logger.debug(f"CPU usage percentages (rates) for {instance}/{job}: {rates}")
+
+            if not rates:
+                logger.info(
+                    f"No valid CPU usage percentages calculated for {instance}/{job}. Skipping."
+                )
+                continue
+
+            # Use Isolation Forest to detect anomalies in the rates
+            X = np.array(rates).reshape(-1, 1)
+            logger.debug(f"Isolation Forest input (X) for {instance}/{job}: {X}")
+
+            clf = IsolationForest(contamination="auto", random_state=42)
+            preds = clf.fit_predict(X)
+
+            logger.info(
+                f"Finished CPU anomaly detection for {instance}/{job}. Predictions: {preds}"
+            )
+
+            # Find anomalies (-1 indicates an anomaly)
+            for i, pred in enumerate(preds):
+                if pred == -1:
+                    # Get the timestamp of the second point used for this rate calculation
+                    anomaly_timestamp = sorted_aggregated_cpu_data[i + 1][0]
+                    # The instance and job are already known from the loop
                     anomalies.append(
                         f"High CPU usage detected on job='{job}', instance='{instance}'. Usage: {rates[i]:.2f}%"
-                    )
-                else:
-                    anomalies.append(
-                        f"High CPU usage detected. Usage: {rates[i]:.2f}% (Instance/Job details not found)"
                     )
 
     except Exception as e:
