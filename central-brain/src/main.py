@@ -269,8 +269,6 @@ def detect_cpu_anomalies(metrics: List[Metric]) -> List[str]:
             # Find anomalies (-1 indicates an anomaly)
             for i, pred in enumerate(preds):
                 if pred == -1:
-                    # Get the timestamp of the second point used for this rate calculation
-                    anomaly_timestamp = sorted_aggregated_cpu_data[i + 1][0]
                     # The instance and job are already known from the loop
                     anomalies.append(
                         f"High CPU usage detected on job='{job}', instance='{instance}'. Usage: {rates[i]:.2f}%"
