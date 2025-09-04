@@ -48,8 +48,12 @@ jobs:
 
     - name: Read Image Tag
       id: image_tag
-      if: github.event_name == 'workflow_run'
-      run: echo "tag=$(cat artifacts/image_tag.txt)" >> $GITHUB_OUTPUT
+      run: |
+        if [ -f infrastructure/terraform/artifacts/image_tag.txt ]; then
+          echo "tag=$(cat infrastructure/terraform/artifacts/image_tag.txt)" >> $GITHUB_OUTPUT
+        else
+          echo "tag=latest" >> $GITHUB_OUTPUT # Default to 'latest' if artifact not found (e.g., manual run)
+        fi
 
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
