@@ -78,7 +78,8 @@ resource "aws_iam_policy" "ai_devops_policy" {
         Effect = "Allow"
         Action = [
           "dynamodb:PutItem",
-          "dynamodb:BatchWriteItem"
+          "dynamodb:BatchWriteItem",
+          "dynamodb:Query"
         ]
         Resource = var.dynamodb_table_arn
       },
