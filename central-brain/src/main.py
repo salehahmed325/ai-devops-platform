@@ -54,13 +54,12 @@ async def get_historical_cpu_metric(
     """Retrieves the most recent node_cpu_seconds_total metric before a given timestamp for a specific instance/job."""
     try:
         response = table.query(
-            KeyConditionExpression=Key("cluster_id").eq(cluster_id),
-            FilterExpression=(
-                Attr("metric_name").eq("node_cpu_seconds_total")
-                & Attr("metric_labels.instance").eq(instance)
-                & Attr("metric_labels.job").eq(job)
-                & Attr("timestamp").lt(Decimal(str(before_timestamp)))
+            IndexName="MetricName-InstanceJob-index",
+            KeyConditionExpression=(
+                Key("metric_name").eq("node_cpu_seconds_total")
+                & Key("instance_job_composite").eq(f"{instance}#{job}")
             ),
+            FilterExpression=Attr("timestamp").lt(Decimal(str(before_timestamp))),
             ScanIndexForward=False,  # Descending order by sort key (timestamp)
             Limit=1,
         )
@@ -371,6 +370,11 @@ async def ingest_data(payload: IngestPayload, api_key: str = Depends(get_api_key
             with table.batch_writer() as batch:
                 # Store each metric as a separate item
                 for metric in payload.metrics:
+                    # Extract instance and job for top-level attributes and composite key
+                    instance_val = metric.metric.get("instance", "unknown")
+                    job_val = metric.metric.get("job", "unknown")
+                    instance_job_composite = f"{instance_val}#{job_val}"
+
                     # Create a unique identifier for the metric
                     labels = []
                     for k, v in sorted(metric.metric.items()):
@@ -386,6 +390,9 @@ async def ingest_data(payload: IngestPayload, api_key: str = Depends(get_api_key
                         "metric_name": metric.metric.get("__name__"),
                         "metric_labels": convert_floats_to_decimals(metric.metric),
                         "metric_value": convert_floats_to_decimals(metric.value),
+                        "instance": instance_val,
+                        "job": job_val,
+                        "instance_job_composite": instance_job_composite,
                     }
                     batch.put_item(Item=item)
 

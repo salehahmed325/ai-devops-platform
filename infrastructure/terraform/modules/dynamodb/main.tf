@@ -15,7 +15,25 @@ resource "aws_dynamodb_table" "main" {
     type = "S" # String
   }
 
-  
+  # Attributes for GSI
+  attribute {
+    name = "metric_name"
+    type = "S"
+  }
+
+  attribute {
+    name = "instance_job_composite"
+    type = "S"
+  }
+
+  global_secondary_index {
+    name               = "MetricName-InstanceJob-index"
+    hash_key           = "metric_name"
+    range_key          = "instance_job_composite"
+    projection_type    = "ALL"
+    read_capacity      = 1
+    write_capacity     = 1
+  }
 
   tags = var.tags
 }
