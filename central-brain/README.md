@@ -9,6 +9,16 @@ The `central-brain` is the core backend service for the AI DevOps Platform. It i
 *   **Data Storage**: Stores all ingested metrics in an AWS DynamoDB table for historical analysis and model training.
 *   **Alerting**: Sends alerts via Telegram when anomalies are detected.
 
+## Future Goals
+
+To become a fully capable AIOps tool, the `central-brain` will be enhanced with the following capabilities:
+
+*   **Advanced Anomaly Detection**: Implement more sophisticated machine learning models to detect a wider range of anomalies in metrics, logs, and traces.
+*   **Alert Correlation and Noise Reduction**: Group related alerts, suppress duplicates, and identify the root cause of incidents to reduce alert fatigue.
+*   **Automated Remediation**: Develop a framework for defining and executing automated actions to remediate common issues (e.g., restarting a service, scaling a resource).
+*   **Predictive Analytics**: Build models to forecast future resource utilization, predict potential issues, and assist with capacity planning.
+*   **ChatOps Integration**: Allow users to interact with the platform, query data, and trigger actions directly from chat applications like Slack and Microsoft Teams.
+
 ## Configuration
 
 The `central-brain` is configured via environment variables. These are set automatically by the Terraform deployment based on the created infrastructure and input variables.
@@ -35,6 +45,3 @@ The `central-brain` is designed for automated, zero-touch deployment.
 4.  **Deploy**: The Terraform configuration for the ECS service is set up to pull the `latest` image from ECR. When the ECS task is restarted or updated, it will automatically use the new image.
 
 There are no manual deployment steps required for this component under normal operation.
-<!-- Last updated: 2025-09-04 15:49 UTC -->
-
-Triggering CI/CD.

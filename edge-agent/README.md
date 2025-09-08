@@ -8,6 +8,14 @@ The `edge-agent` is a lightweight, containerized agent responsible for collectin
 *   **Secure Forwarding**: Sends the collected data to the `central-brain`'s secure `/ingest` endpoint.
 *   **Health Checks**: Provides a `/health` endpoint to confirm the agent is running correctly.
 
+## Future Goals
+
+To evolve into a comprehensive data collector for our AIOps platform, the `edge-agent` will be enhanced to collect a wider range of data, including:
+
+*   **Logs**: From applications and systems to provide context for metric anomalies.
+*   **Traces**: To enable distributed tracing and understand the flow of requests across services.
+*   **Events**: From the underlying infrastructure (e.g., Kubernetes events, AWS health events) to correlate infrastructure changes with application behavior.
+
 ## Deployment
 
 The `edge-agent` is deployed as a Docker container on the server you wish to monitor.
@@ -69,4 +77,3 @@ docker logs -f edge-agent
 
 You should see logs indicating that it is collecting metrics and successfully sending them to the `central-brain`.
 
-Triggering CI/CD.
