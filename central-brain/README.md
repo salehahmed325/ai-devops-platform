@@ -45,3 +45,5 @@ The `central-brain` is designed for automated, zero-touch deployment.
 4.  **Deploy**: The Terraform configuration for the ECS service is set up to pull the `latest` image from ECR. When the ECS task is restarted or updated, it will automatically use the new image.
 
 There are no manual deployment steps required for this component under normal operation.
+
+updated at 06:18PM on 08/09/2025
