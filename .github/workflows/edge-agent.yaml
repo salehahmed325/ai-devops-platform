@@ -66,3 +66,42 @@ jobs:
         docker tag $ECR_REGISTRY/edge-agent:${{ github.sha }} ${{ secrets.DOCKERHUB_USERNAME }}/edge-agent:${{ github.sha }}
         docker tag $ECR_REGISTRY/edge-agent:${{ github.sha }} ${{ secrets.DOCKERHUB_USERNAME }}/edge-agent:latest
         docker push ${{ secrets.DOCKERHUB_USERNAME }}/edge-agent --all-tags
+
+  build-and-push-fluent-bit:
+    name: Build and Push Fluent Bit
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Login to Amazon ECR
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Build and Push to ECR
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      run: |
+        docker build -t $ECR_REGISTRY/fluent-bit:${{ github.sha }} ./edge-agent/fluent-bit
+        docker tag $ECR_REGISTRY/fluent-bit:${{ github.sha }} $ECR_REGISTRY/fluent-bit:latest
+        docker push $ECR_REGISTRY/fluent-bit --all-tags
+
+    - name: Login to Docker Hub
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      run: |
+        docker login -u ${{ secrets.DOCKERHUB_USERNAME }} -p ${{ secrets.DOCKERHUB_TOKEN }}
+
+    - name: Build and Push to Docker Hub
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      run: |
+        docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/fluent-bit:${{ github.sha }} ./edge-agent/fluent-bit
+        docker tag ${{ secrets.DOCKERHUB_USERNAME }}/fluent-bit:${{ github.sha }} ${{ secrets.DOCKERHUB_USERNAME }}/fluent-bit:latest
+        docker push ${{ secrets.DOCKERHUB_USERNAME }}/fluent-bit --all-tags

@@ -51,7 +51,7 @@ module "ecr" {
   source       = "./modules/ecr"
   project_name = var.project_name
   environment  = var.environment
-  repositories = ["edge-agent", "central-brain"]
+  repositories = ["edge-agent", "central-brain", "fluent-bit"]
   tags         = local.common_tags
 }
 
@@ -104,4 +104,5 @@ module "ecs" {
   container_image             = "${module.ecr.repository_urls["central-brain"]}:${var.container_image_tag}"
   ecs_task_execution_role_arn = module.iam.ecs_task_execution_role_arn
   telegram_bot_token          = var.telegram_bot_token # Pass Telegram bot token
+  dynamodb_logs_table_name    = module.dynamodb_data.logs_table_name
 }

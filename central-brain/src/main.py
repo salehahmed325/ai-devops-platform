@@ -22,6 +22,7 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 API_KEY = os.getenv("API_KEY", "dev-test-key-123")  # Default for development
 API_KEY_NAME = "X-API-KEY"
 DYNAMODB_TABLE_NAME = os.getenv("DYNAMODB_TABLE_NAME", "ai-devops-platform-data")
+DYNAMODB_LOGS_TABLE_NAME = os.getenv("DYNAMODB_LOGS_TABLE_NAME", "ai-devops-platform-logs")
 
 # --- Logging Setup ---
 logging.basicConfig(
@@ -33,6 +34,7 @@ logger = logging.getLogger(__name__)
 # --- DynamoDB Setup ---
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(DYNAMODB_TABLE_NAME)  # type: ignore
+logs_table = dynamodb.Table(DYNAMODB_LOGS_TABLE_NAME) # type: ignore
 alert_configs_table = dynamodb.Table(  # type: ignore
     os.getenv("DYNAMODB_ALERT_CONFIGS_TABLE_NAME", "ai-devops-platform-alert-configs")
 )
@@ -120,6 +122,10 @@ class Metric(BaseModel):
     metric: Dict[str, str]
     value: List[Any]
 
+class LogPayload(BaseModel):
+    cluster_id: str
+    log: str
+    timestamp: float
 
 class IngestPayload(BaseModel):
     cluster_id: str
@@ -449,6 +455,24 @@ async def ingest_data(payload: IngestPayload, api_key: str = Depends(get_api_key
         logger.error(f"An unexpected error occurred in ingest_data: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="An unexpected error occurred.")
 
+@app.post("/ingest/logs")
+async def ingest_logs(payload: List[LogPayload], api_key: str = Depends(get_api_key)):
+    """Endpoint to receive log data from Fluent Bit."""
+    try:
+        logger.info(f"Received {len(payload)} log entries.")
+        with logs_table.batch_writer() as batch:
+            for log_entry in payload:
+                item = {
+                    "cluster_id": log_entry.cluster_id,
+                    "timestamp": Decimal(str(log_entry.timestamp)),
+                    "log": log_entry.log,
+                }
+                batch.put_item(Item=item)
+        logger.info(f"Successfully stored {len(payload)} log entries in DynamoDB.")
+        return {"status": "success", "message": "Logs ingested successfully"}
+    except Exception as e:
+        logger.error(f"An unexpected error occurred in ingest_logs: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="An unexpected error occurred.")
 
 if __name__ == "__main__":
     import uvicorn
