@@ -137,6 +137,10 @@ resource "aws_ecs_task_definition" "main" {
         {
           name  = "TELEGRAM_BOT_TOKEN"
           value = var.telegram_bot_token
+        },
+        {
+          name  = "DYNAMODB_LOGS_TABLE_NAME"
+          value = var.dynamodb_logs_table_name
         }
       ]
       portMappings = [

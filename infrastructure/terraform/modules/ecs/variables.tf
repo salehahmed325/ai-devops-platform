@@ -62,6 +62,11 @@ variable "telegram_bot_token" {
   sensitive   = true
 }
 
+variable "dynamodb_logs_table_name" {
+  description = "The name of the DynamoDB table for logs"
+  type        = string
+}
+
 variable "tags" {
   description = "A map of tags to assign to the resources"
   type        = map(string)
