@@ -33,6 +33,7 @@ docker run -d \
   -e TZ=Asia/Dhaka \
   --env-file /home/saleh/ai-devops-platform/edge-agent/config.env \
   --add-host=central-brain:172.17.0.1 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
   salehahmed325/edge-agent:latest
 
 # Check the container statuses
