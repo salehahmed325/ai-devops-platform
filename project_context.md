@@ -46,6 +46,21 @@ Today, we focused on resolving infrastructure issues and defining the long-term 
 6.  **Feature**: Updated the `README.md` files for the `edge-agent` and `central-brain` to reflect the new project goals.
 7.  **Feature**: Updated this `project_context.md` file with the new vision, goals, and roadmap.
 
+## 4. Session Summary (2025-09-08 - Continued)
+
+Today, we continued our work on integrating Fluent Bit for log collection:
+
+1.  **Feature**: Integrated Fluent Bit for log collection.
+    *   Created Fluent Bit configuration and Dockerfile.
+    *   Updated the `edge-agent`'s CI/CD pipeline to build and push the Fluent Bit image to both ECR and Docker Hub.
+    *   Updated the `edge-agent` to start and monitor the Fluent Bit container.
+    *   Updated the `central-brain` to receive log data and store it in a new DynamoDB table.
+    *   Updated the Terraform configuration to create the new DynamoDB table and ECR repository.
+2.  **Problem**: `edge-agent` failed to connect to Docker daemon.
+3.  **Solution**: Mounted the Docker socket into the `edge-agent` container.
+4.  **Problem**: Fluent Bit was not collecting Docker container logs.
+5.  **Solution**: Updated Fluent Bit configuration to tail Docker logs and added a parser for Docker logs.
+
 ## 5. Next Steps
 
 Here is the high-level roadmap we've defined for the project:
