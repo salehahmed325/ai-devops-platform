@@ -65,7 +65,9 @@ class EdgeAgent:
             container_name = "fluent-bit"
             try:
                 container = self.docker_client.containers.get(container_name)
-                logger.info(f"Found existing container {container_name}. Stopping and removing it.")
+                logger.info(
+                    f"Found existing container {container_name}. Stopping and removing it."
+                )
                 container.stop()
                 container.remove()
             except docker.errors.NotFound:
@@ -88,7 +90,9 @@ class EdgeAgent:
         try:
             container = self.docker_client.containers.get("fluent-bit")
             if container.status != "running":
-                logger.warning(f"Fluent Bit container is not running. Status: {container.status}")
+                logger.warning(
+                    f"Fluent Bit container is not running. Status: {container.status}"
+                )
         except docker.errors.NotFound:
             logger.warning("Fluent Bit container not found.")
         except Exception as e:
