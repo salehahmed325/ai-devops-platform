@@ -69,3 +69,4 @@ docker logs -f edge-agent
 
 You should see logs indicating that it is collecting metrics and successfully sending them to the `central-brain`.
 
+Triggering CI/CD.
