@@ -47,6 +47,13 @@ spec:
             port: 8080
           initialDelaySeconds: 5
           periodSeconds: 5
+        volumeMounts:
+        - name: docker-socket
+          mountPath: /var/run/docker.sock
+      volumes:
+      - name: docker-socket
+        hostPath:
+          path: /var/run/docker.sock
 ---
 apiVersion: v1
 kind: Service

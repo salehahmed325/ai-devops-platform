@@ -106,3 +106,4 @@ module "ecs" {
   telegram_bot_token          = var.telegram_bot_token # Pass Telegram bot token
   dynamodb_logs_table_name    = module.dynamodb_data.logs_table_name
 }
+

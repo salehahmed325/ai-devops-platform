@@ -22,6 +22,8 @@ docker run -d \
   -v /var/lib/docker/containers:/var/lib/docker/containers:ro \
   -e CLUSTER_ID=$(grep CLUSTER_ID /home/saleh/ai-devops-platform/edge-agent/config.env | cut -d '=' -f2) \
   -e API_KEY=$(grep API_KEY /home/saleh/ai-devops-platform/edge-agent/config.env | cut -d '=' -f2) \
+  -e CENTRAL_BRAIN_HOST=ai-devops-platform-alb-dev-547606599.us-east-1.elb.amazonaws.com \
+  -e CENTRAL_BRAIN_PORT=80 \
   salehahmed325/fluent-bit:latest
 
 # Run the agent container
@@ -32,7 +34,6 @@ docker run -d \
   -p 8080:8080 \
   -e TZ=Asia/Dhaka \
   --env-file /home/saleh/ai-devops-platform/edge-agent/config.env \
-  --add-host=central-brain:172.17.0.1 \
   -v /var/run/docker.sock:/var/run/docker.sock \
   salehahmed325/edge-agent:latest
 
