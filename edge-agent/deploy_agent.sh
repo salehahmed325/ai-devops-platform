@@ -13,9 +13,7 @@ echo "Pulling the latest container images......"
 docker pull salehahmed325/edge-agent:latest
 docker pull salehahmed325/fluent-bit:latest
 
-# Run the fluent-bit container
-echo "Running the latest fluent-bit container......"
-docker run -d --name fluent-bit --restart unless-stopped --user root -v /var/log:/var/log:ro -v /var/lib/docker/containers:/var/lib/docker/containers:ro --group-add 119 --env-file /home/saleh/ai-devops-platform/edge-agent/fluent-bit.env salehahmed325/fluent-bit:latest
+docker run -d --name fluent-bit --restart unless-stopped --user root -v /var/log:/var/log:ro -v /var/lib/docker/containers:/var/lib/docker/containers:ro --group-add 119 -e CLUSTER_ID=gmdcpgrafana01 -e API_KEY=dev-test-key-123 -e CENTRAL_BRAIN_HOST=ai-devops-platform-alb-dev-547606599.us-east-1.elb.amazonaws.com -e CENTRAL_BRAIN_PORT=80 salehahmed325/fluent-bit:latest
 
 # Run the agent container
 echo "Running the latest edge-agent container......"
