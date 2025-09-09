@@ -83,7 +83,8 @@ resource "aws_iam_policy" "ai_devops_policy" {
         ]
         Resource = [
           var.dynamodb_table_arn,
-          "${var.dynamodb_table_arn}/index/MetricName-InstanceJob-index"
+          "${var.dynamodb_table_arn}/index/MetricName-InstanceJob-index",
+          var.dynamodb_logs_table_arn
         ]
       },
       {

@@ -72,3 +72,8 @@ output "logs_table_name" {
   description = "The name of the DynamoDB logs table"
   value       = aws_dynamodb_table.logs.name
 }
+
+output "logs_table_arn" {
+  description = "The ARN of the DynamoDB logs table"
+  value       = aws_dynamodb_table.logs.arn
+}

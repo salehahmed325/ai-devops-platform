@@ -43,6 +43,7 @@ module "iam" {
   dynamodb_table_name = "ai-devops-platform-data"
   dynamodb_table_arn       = module.dynamodb_data.table_arn # Pass the ARN for data table
   dynamodb_alert_table_arn = aws_dynamodb_table.alert_configs.arn # Pass the ARN for alert configs table
+  dynamodb_logs_table_arn  = module.dynamodb_data.logs_table_arn # Pass the ARN for logs table
   tags                     = local.common_tags
 }
 
