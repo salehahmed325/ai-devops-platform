@@ -20,6 +20,7 @@ docker run -d \
   --restart unless-stopped \
   -v /var/log:/var/log:ro \
   -v /var/lib/docker/containers:/var/lib/docker/containers:ro \
+  --group-add 119 \
   -e CLUSTER_ID=$(grep CLUSTER_ID /home/saleh/ai-devops-platform/edge-agent/config.env | cut -d '=' -f2) \
   -e API_KEY=$(grep API_KEY /home/saleh/ai-devops-platform/edge-agent/config.env | cut -d '=' -f2) \
   -e CENTRAL_BRAIN_HOST=ai-devops-platform-alb-dev-547606599.us-east-1.elb.amazonaws.com \
@@ -35,6 +36,7 @@ docker run -d \
   -e TZ=Asia/Dhaka \
   --env-file /home/saleh/ai-devops-platform/edge-agent/config.env \
   -v /var/run/docker.sock:/var/run/docker.sock \
+  --group-add 119 \
   salehahmed325/edge-agent:latest
 
 # Check the container statuses
