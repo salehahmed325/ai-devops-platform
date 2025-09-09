@@ -61,6 +61,23 @@ Today, we continued our work on integrating Fluent Bit for log collection:
 4.  **Problem**: Fluent Bit was not collecting Docker container logs.
 5.  **Solution**: Updated Fluent Bit configuration to tail Docker logs and added a parser for Docker logs.
 
+## 4. Session Summary (2025-09-09 - Continued)
+
+Today, we focused on resolving Fluent Bit and Central Brain connectivity and permission issues.
+
+1.  **Fluent Bit Deployment:**
+    *   Transitioned from Dockerized Fluent Bit to direct installation on the server to bypass Docker-related environment and permission complexities.
+    *   **Current Status:** Fluent Bit service is running, but still encountering:
+        *   `float_parsing` error for `timestamp` (Fluent Bit is sending literal "$time" instead of actual timestamp).
+        *   Environment variables (`CENTRAL_BRAIN_HOST`, `CENTRAL_BRAIN_PORT`, `CLUSTER_ID`, `API_KEY`) are not being correctly picked up by Fluent Bit from the system environment.
+        *   Persistent `read error, check permissions` for `/var/lib/docker/containers/*/*.log`, despite running as root and setting host permissions/group ownership.
+        *   `uuid` filter is not available in Fluent Bit v4.0.9.
+
+2.  **Central Brain Connectivity & Permissions:**
+    *   Resolved `AccessDeniedException` for `dynamodb:BatchWriteItem` on `ai-devops-platform-logs` by updating IAM policy.
+    *   **Current Status:** Central Brain is receiving logs, but occasionally returns `HTTP status=500` with `ValidationException: Provided list of item keys contains duplicates`. This is likely due to Fluent Bit's timestamp/uniqueness issue.
+    *   `TELEGRAM_BOT_TOKEN` remains unset (requires GitHub Secret configuration).
+
 ## 5. Next Steps
 
 Here is the high-level roadmap we've defined for the project:
@@ -79,3 +96,8 @@ Here is the high-level roadmap we've defined for the project:
     *   Develop models for root cause analysis and predictive analytics.
     *   Create a feedback loop for continuous learning.
     *   Build a user interface to visualize data, insights, and recommendations.
+
+*   **Current Session Focus:**
+    *   **Fluent Bit:** Investigate and resolve the `timestamp` parsing and environment variable propagation issues. Address the persistent log file permission error.
+    *   **Central Brain:** Debug the `ValidationException` (duplicate keys) once Fluent Bit's timestamp issue is resolved.
+    *   **Infrastructure:** Ensure `TELEGRAM_BOT_TOKEN` is correctly configured in GitHub Secrets and applied via Terraform.
