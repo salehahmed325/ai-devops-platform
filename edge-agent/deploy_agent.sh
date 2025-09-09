@@ -18,6 +18,7 @@ echo "Running the latest fluent-bit container......"
 docker run -d \
   --name fluent-bit \
   --restart unless-stopped \
+  --user root \
   -v /var/log:/var/log:ro \
   -v /var/lib/docker/containers:/var/lib/docker/containers:ro \
   --group-add 119 \
