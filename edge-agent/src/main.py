@@ -13,7 +13,6 @@ import asyncio
 import time
 import httpx
 from contextlib import asynccontextmanager
-import docker
 
 
 # Configuration
@@ -56,47 +55,6 @@ class EdgeAgent:
     def __init__(self):
         self.kubernetes = KubernetesClient()
         self.is_healthy = True
-        self.docker_client = docker.from_env()
-
-    def start_fluent_bit(self):
-        """Start the Fluent Bit container."""
-        try:
-            logger.info("Starting Fluent Bit container...")
-            container_name = "fluent-bit"
-            try:
-                container = self.docker_client.containers.get(container_name)
-                logger.info(
-                    f"Found existing container {container_name}. Stopping and removing it."
-                )
-                container.stop()
-                container.remove()
-            except docker.errors.NotFound:
-                pass
-
-            self.docker_client.containers.run(
-                "salehahmed325/fluent-bit:latest",
-                name=container_name,
-                detach=True,
-                network_mode="host",
-                volumes={"/var/log": {"bind": "/var/log", "mode": "ro"}},
-                environment={"CLUSTER_ID": CLUSTER_ID, "API_KEY": API_KEY},
-            )
-            logger.info(f"Successfully started container {container_name}.")
-        except Exception as e:
-            logger.error(f"Failed to start Fluent Bit container: {e}")
-
-    async def monitor_fluent_bit(self):
-        """Monitor the health of the Fluent Bit container."""
-        try:
-            container = self.docker_client.containers.get("fluent-bit")
-            if container.status != "running":
-                logger.warning(
-                    f"Fluent Bit container is not running. Status: {container.status}"
-                )
-        except docker.errors.NotFound:
-            logger.warning("Fluent Bit container not found.")
-        except Exception as e:
-            logger.error(f"Failed to monitor Fluent Bit container: {e}")
 
     async def collect_metrics(self):
         """Collect a curated list of metrics from Prometheus"""
@@ -147,9 +105,6 @@ class EdgeAgent:
 
         while True:
             try:
-                # Monitor Fluent Bit
-                await self.monitor_fluent_bit()
-
                 # Collect data
                 metrics = await self.collect_metrics()
                 k8s_state = await self.kubernetes.get_cluster_state()
@@ -198,9 +153,6 @@ async def lifespan(app: FastAPI):
     # Startup
     agent = EdgeAgent()
     app.state.agent = agent
-
-    # Start Fluent Bit
-    agent.start_fluent_bit()
 
     # Start the collection loop as a background task
     task = asyncio.create_task(agent.run_loop())
