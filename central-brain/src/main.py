@@ -32,7 +32,9 @@ DYNAMODB_LOGS_TABLE_NAME = os.getenv(
     "DYNAMODB_LOGS_TABLE_NAME", "ai-devops-platform-logs"
 )
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+TELEGRAM_API_URL = (
+    f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+)
 
 # --- Logging Setup ---
 # AWS Lambda automatically configures a logger, so we can just get it
@@ -44,7 +46,9 @@ dynamodb: DynamoDBServiceResource = boto3.resource("dynamodb")
 table: Table = dynamodb.Table(DYNAMODB_TABLE_NAME)
 logs_table: Table = dynamodb.Table(DYNAMODB_LOGS_TABLE_NAME)
 alert_configs_table: Table = dynamodb.Table(
-    os.getenv("DYNAMODB_ALERT_CONFIGS_TABLE_NAME", "ai-devops-platform-alert-configs")
+    os.getenv(
+        "DYNAMODB_ALERT_CONFIGS_TABLE_NAME", "ai-devops-platform-alert-configs"
+    )
 )
 
 
@@ -73,7 +77,12 @@ class AlertManager:
 
     async def send_telegram_alert(self, chat_id: str, message: str):
         if not TELEGRAM_BOT_TOKEN:
-            logger.warning("TELEGRAM_BOT_TOKEN is not set. Cannot send Telegram alert.")
+            logger.warning(
+                (
+                    "TELEGRAM_BOT_TOKEN is not set. "
+                    "Cannot send Telegram alert."
+                )
+            )
             return
 
         payload = {"chat_id": chat_id, "text": message, "parse_mode": "Markdown"}
@@ -98,7 +107,9 @@ def detect_up_anomalies(metrics: List[Metric]) -> List[str]:
 
         up_values = [float(m.value[1]) for m in up_metrics]
         X = np.array(up_values).reshape(-1, 1)
-        preds = IsolationForest(contamination="auto", random_state=42).fit_predict(X)
+        preds = IsolationForest(
+            contamination="auto", random_state=42
+        ).fit_predict(X)
 
         for i, pred in enumerate(preds):
             if pred == -1:
@@ -165,10 +176,14 @@ async def handler(event, context):
                         sorted([f"{k}={v}" for k, v in labels.items()])
                     )
                     labels_hash = hashlib.sha256(labels_str.encode()).hexdigest()
-                    metric_identifier = f"{timestamp_sec}-{metric_name}-{labels_hash}"
+                    metric_identifier = (
+                        f"{timestamp_sec}-{metric_name}-{labels_hash}"
+                    )
 
                     item = {
-                        "cluster_id": labels.get("cluster_id", "unknown_cluster"),
+                        "cluster_id": labels.get(
+                            "cluster_id", "unknown_cluster"
+                        ),
                         "metric_identifier": metric_identifier,
                         "timestamp": Decimal(str(timestamp_sec)),
                         "metric_name": metric_name,
@@ -182,28 +197,38 @@ async def handler(event, context):
                     batch.put_item(Item=item)
 
         logger.info(
-            f"Successfully processed and stored "
-            f"{len(metrics_for_anomaly_detection)} metric samples for cluster: {cluster_id}."
-        )  # noqa: E501
+            (
+                f"Successfully processed and stored "
+                f"{len(metrics_for_anomaly_detection)} metric samples for cluster: {cluster_id}."
+            )
+        )
 
         # --- Anomaly Detection and Alerting ---
-        anomalies = await detect_anomalies(metrics_for_anomaly_detection, cluster_id)
+        anomalies = await detect_anomalies(
+            metrics_for_anomaly_detection, cluster_id
+        )
         if anomalies:
             alert_manager = AlertManager(alert_configs_table)
             try:
-                response = alert_configs_table.get_item(Key={"cluster_id": cluster_id})
+                response = alert_configs_table.get_item(
+                    Key={"cluster_id": cluster_id}
+                )
                 config_item = response.get("Item")
                 if config_item and "telegram_chat_id" in config_item:
                     chat_id = str(config_item["telegram_chat_id"])
                     for anomaly in anomalies:
-                        alert_message = f"🚨 Anomaly Alert for Cluster `{cluster_id}` 🚨\\n\\n{anomaly}"
+                        alert_message = (
+                            f"🚨 Anomaly Alert for Cluster `{cluster_id}` 🚨\n\n{anomaly}"
+                        )
                         await alert_manager.send_telegram_alert(
                             chat_id, alert_message
-                        )  # noqa: E501
+                        )
                 else:
                     logger.warning(
-                        f"No Telegram chat ID for cluster {cluster_id}. "
-                        f"Logging alerts."
+                        (
+                            f"No Telegram chat ID for cluster {cluster_id}. "
+                            f"Logging alerts."
+                        )
                     )
                     for anomaly in anomalies:
                         logger.warning(f"ALERT: {anomaly}")
