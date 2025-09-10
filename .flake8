@@ -4,3 +4,4 @@ exclude =
     __pycache__,
     venv,
     central-brain/src/prompb
+max-line-length = 88
