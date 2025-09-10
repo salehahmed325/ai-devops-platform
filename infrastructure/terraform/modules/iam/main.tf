@@ -71,7 +71,7 @@ resource "aws_iam_policy" "ai_devops_policy" {
           "logs:PutLogEvents",
           "logs:CreateLogStream"
         ]
-        Resource = "arn:aws:logs:*:*:log-group:${var.project_name}*"
+        Resource = "arn:aws:logs:*:*:log-group:/aws/lambda/${var.project_name}*"
       },
       {
         Sid    = "DynamoDBAccess"
