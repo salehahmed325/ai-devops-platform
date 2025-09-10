@@ -33,3 +33,14 @@ variable "telegram_bot_token" {
   sensitive   = true
   default     = "" # Provide a default empty string
 }
+
+variable "api_key" {
+  description = "The API key for securing the central-brain endpoint"
+  type        = string
+  sensitive   = true
+}
+
+variable "lambda_zip_key" {
+  description = "The S3 key for the Lambda function deployment package (zip file)"
+  type        = string
+}

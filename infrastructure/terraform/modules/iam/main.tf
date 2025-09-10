@@ -122,6 +122,34 @@ resource "aws_iam_role_policy_attachment" "ai_devops_policy" {
   policy_arn = aws_iam_policy.ai_devops_policy.arn
 }
 
+# IAM Role for Lambda Function Execution
+resource "aws_iam_role" "lambda_execution_role" {
+  name = "lambdaExecutionRole"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = merge(var.tags, {
+    Name = "lambdaExecutionRole"
+  })
+}
+
+# Attach the custom policy to the Lambda role
+resource "aws_iam_role_policy_attachment" "lambda_ai_devops_policy" {
+  role       = aws_iam_role.lambda_execution_role.name
+  policy_arn = aws_iam_policy.ai_devops_policy.arn
+}
+
 output "role_arns" {
   description = "IAM role ARNs"
   value = {

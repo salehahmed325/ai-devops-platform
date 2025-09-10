@@ -52,7 +52,7 @@ module "ecr" {
   source       = "./modules/ecr"
   project_name = var.project_name
   environment  = var.environment
-  repositories = ["edge-agent", "central-brain", "fluent-bit"]
+  repositories = ["edge-agent", "fluent-bit"]
   tags         = local.common_tags
 }
 
@@ -87,24 +87,45 @@ resource "aws_dynamodb_table" "alert_configs" {
   tags = local.common_tags
 }
 
-
-# --- ECS Deployment ---
-module "ecs" {
-  source = "./modules/ecs"
-
-  project_name    = var.project_name
-  environment     = var.environment
-  aws_region      = var.aws_region
-  tags            = local.common_tags
-
-  vpc_id          = module.vpc.vpc_id
-  public_subnet_ids = module.vpc.public_subnets
-  private_subnet_ids  = module.vpc.private_subnets
-
-  # Dynamically construct the container image URI
-  container_image             = "${module.ecr.repository_urls["central-brain"]}:${var.container_image_tag}"
-  ecs_task_execution_role_arn = module.iam.ecs_task_execution_role_arn
-  telegram_bot_token          = var.telegram_bot_token # Pass Telegram bot token
-  dynamodb_logs_table_name    = module.dynamodb_data.logs_table_name
+# --- S3 Bucket for Lambda Code ---
+module "s3_lambda_code" {
+  source       = "./modules/s3"
+  project_name = var.project_name
+  environment  = var.environment
+  bucket_name  = "ai-devops-platform-lambda-code-${local.aws_account_id}"
+  tags         = local.common_tags
 }
 
+# --- Lambda Deployment for Central Brain ---
+module "lambda_central_brain" {
+  source = "./modules/lambda"
+
+  project_name = var.project_name
+  environment  = var.environment
+  tags         = local.common_tags
+
+  function_name  = "${var.project_name}-central-brain-${var.environment}"
+  iam_role_arn   = module.iam.lambda_execution_role_arn
+  s3_bucket_name = module.s3_lambda_code.bucket_name
+  s3_key         = var.lambda_zip_key
+  
+  lambda_environment_variables = {
+    API_KEY                           = var.api_key
+    TELEGRAM_BOT_TOKEN                = var.telegram_bot_token
+    DYNAMODB_TABLE_NAME               = module.dynamodb_data.table_name
+    DYNAMODB_LOGS_TABLE_NAME          = module.dynamodb_data.logs_table_name
+    DYNAMODB_ALERT_CONFIGS_TABLE_NAME = aws_dynamodb_table.alert_configs.name
+  }
+}
+
+# --- API Gateway for Central Brain Lambda ---
+module "api_gateway_central_brain" {
+  source = "./modules/api-gateway"
+
+  project_name = var.project_name
+  environment  = var.environment
+  tags         = local.common_tags
+
+  lambda_invoke_arn = module.lambda_central_brain.function_invoke_arn
+  function_name     = module.lambda_central_brain.function_name
+}

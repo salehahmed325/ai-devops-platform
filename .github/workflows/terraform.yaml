@@ -2,13 +2,12 @@ name: Deploy Infrastructure
 
 on:
   workflow_run:
-    workflows: ["Build Central Brain"]
+    workflows: ["Build and Deploy Central Brain Lambda"]
     types:
       - completed
     branches:
       - main
 
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
 env:
@@ -19,7 +18,7 @@ jobs:
   terraform-deploy:
     name: Terraform Apply
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' # Run if manually dispatched or if the build workflow succeeded
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     defaults:
       run:
         shell: bash
@@ -27,6 +26,7 @@ jobs:
     env:
       TF_VAR_aws_account_id: ${{ secrets.AWS_ACCOUNT_ID }}
       TF_VAR_telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TF_VAR_api_key: ${{ secrets.API_KEY }}
 
     steps:
     - name: Checkout code
@@ -37,22 +37,23 @@ jobs:
       with:
         terraform_version: ${{ env.TF_VERSION }}
 
-    - name: Download Image Tag Artifact
+    - name: Download Lambda Zip Key Artifact
       if: github.event_name == 'workflow_run'
       uses: actions/download-artifact@v4
       with:
-        name: central-brain-image-tag
+        name: central-brain-lambda-zip-key
         path: infrastructure/terraform/artifacts
         github-token: ${{ secrets.GITHUB_TOKEN }}
         run-id: ${{ github.event.workflow_run.id }}
 
-    - name: Read Image Tag
-      id: image_tag
+    - name: Read Lambda Zip Key
+      id: lambda_key
       run: |
-        if [ -f infrastructure/terraform/artifacts/image_tag.txt ]; then
-          echo "tag=$(cat infrastructure/terraform/artifacts/image_tag.txt)" >> $GITHUB_OUTPUT
+        if [ -f infrastructure/terraform/artifacts/lambda_zip_key.txt ]; then
+          echo "key=$(cat infrastructure/terraform/artifacts/lambda_zip_key.txt)" >> $GITHUB_OUTPUT
         else
-          echo "tag=latest" >> $GITHUB_OUTPUT # Default to 'latest' if artifact not found (e.g., manual run)
+          # This default is a fallback for manual runs, but a real key is required for a successful apply.
+          echo "key=placeholder.zip" >> $GITHUB_OUTPUT
         fi
 
     - name: Configure AWS credentials
@@ -74,4 +75,4 @@ jobs:
     - name: Terraform Apply
       id: apply
       run: |
-        terraform apply -auto-approve -input=false -var="container_image_tag=${{ steps.image_tag.outputs.tag || 'latest' }}"
+        terraform apply -auto-approve -input=false -var="lambda_zip_key=${{ steps.lambda_key.outputs.key }}"

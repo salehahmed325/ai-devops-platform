@@ -1,6 +1,6 @@
-output "central_brain_url" {
-  description = "The public URL of the Central Brain service"
-  value       = "http://${module.ecs.load_balancer_dns_name}"
+output "central_brain_api_endpoint" {
+  description = "The invoke URL for the Central Brain API Gateway"
+  value       = module.api_gateway_central_brain.api_endpoint
 }
 
 output "vpc_id" {

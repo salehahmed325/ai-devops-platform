@@ -1,24 +1,19 @@
-name: Build Central Brain
+name: Build and Deploy Central Brain Lambda
 
 on:
   workflow_dispatch:
   push:
-    branches: [ main, develop ]
-    paths:
-      - 'central-brain/**'
-      - '.github/workflows/central-brain.yaml'
-  pull_request:
     branches: [ main ]
     paths:
       - 'central-brain/**'
+      - '.github/workflows/central-brain.yaml'
 
 env:
   AWS_REGION: us-east-1
-  ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
 
 jobs:
-  build-and-push-central-brain:
-    name: Build and Push Central Brain
+  build-and-deploy-central-brain:
+    name: Build and Deploy Central Brain Lambda
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
@@ -27,17 +22,29 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.11'
+        python-version: '3.9' # Using Python 3.9 for Lambda compatibility
 
     - name: Install dependencies and tools
       run: |
-        pip install black flake8
+        pip install black flake8 zip
         if [ -f central-brain/src/requirements.txt ]; then pip install -r central-brain/src/requirements.txt; fi
 
     - name: Lint and Format Check
       run: |
         black --check central-brain/
         flake8 central-brain/
+
+    - name: Create Lambda Deployment Package
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      run: |
+        echo "Creating deployment package..."
+        mkdir package
+        pip install -r central-brain/src/requirements.txt -t ./package
+        cp -r central-brain/src/* ./package/
+        cd package
+        zip -r ../central-brain-deployment.zip .
+        cd ..
+        echo "Deployment package created."
 
     - name: Configure AWS credentials
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -47,34 +54,20 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ env.AWS_REGION }}
 
-    - name: Login to Amazon ECR
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-      id: login-ecr
-      uses: aws-actions/amazon-ecr-login@v2
-
-    - name: Build and Push to ECR
+    - name: Upload Lambda Package to S3
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       run: |
-        docker build -t $ECR_REGISTRY/central-brain:${{ github.sha }} ./central-brain
-        docker tag $ECR_REGISTRY/central-brain:${{ github.sha }} $ECR_REGISTRY/central-brain:latest
-        docker push $ECR_REGISTRY/central-brain --all-tags
-
-    - name: Save Image Tag as Artifact
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-      run: |
+        S3_BUCKET="ai-devops-platform-lambda-code-${{ secrets.AWS_ACCOUNT_ID }}"
+        ZIP_KEY="central-brain-${{ github.sha }}.zip"
+        aws s3 cp central-brain-deployment.zip s3://$S3_BUCKET/$ZIP_KEY
+        echo "Uploaded to s3://$S3_BUCKET/$ZIP_KEY"
+        # Save the S3 key for the Terraform workflow
         mkdir -p artifacts
-        echo ${{ github.sha }} > artifacts/image_tag.txt
+        echo $ZIP_KEY > artifacts/lambda_zip_key.txt
 
-    - name: Upload Image Tag Artifact
+    - name: Upload Lambda Zip Key Artifact
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       uses: actions/upload-artifact@v4
       with:
-        name: central-brain-image-tag
-        path: artifacts/image_tag.txt
-
-    - name: Push to Docker Hub
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-      run: |
-        docker login -u ${{ secrets.DOCKERHUB_USERNAME }} -p ${{ secrets.DOCKERHUB_TOKEN }}
-        docker tag $ECR_REGISTRY/central-brain:${{ github.sha }} ${{ secrets.DOCKERHUB_USERNAME }}/central-brain:${{ github.sha }}
-        docker tag $ECR_REGISTRY/central-brain:${{ github.sha }} ${{ secrets.DOCKERHUB_USERNAME }}/central-brain:latest
-        docker push ${{ secrets.DOCKERHUB_USERNAME }}/central-brain --all-tags
+        name: central-brain-lambda-zip-key
+        path: artifacts/lambda_zip_key.txt

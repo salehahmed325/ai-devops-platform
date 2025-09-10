@@ -1,6 +1,5 @@
-fastapi
-uvicorn[standard]
-python-dotenv
 scikit-learn
 boto3
 httpx
+protobuf
+python-snappy
