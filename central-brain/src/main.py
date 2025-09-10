@@ -198,7 +198,7 @@ async def handler(event, context):
         logger.info(
             (
                 f"Successfully processed and stored "
-                f"{len(metrics_for_anomaly_detection)} metric samples for cluster: {cluster_id}."
+                f"{len(metrics_for_anomaly_detection)} metric samples for cluster: {cluster_id}."  # noqa: E501
             )
         )
 
