@@ -42,6 +42,7 @@ alert_configs_table = dynamodb.Table(
     os.getenv("DYNAMODB_ALERT_CONFIGS_TABLE_NAME", "ai-devops-platform-alert-configs")
 )
 
+
 # --- Data Models ---
 # Replaced Pydantic's BaseModel with a lighter dataclass for the Lambda environment
 @dataclass
@@ -60,6 +61,7 @@ def convert_floats_to_decimals(obj):
         return [convert_floats_to_decimals(elem) for elem in obj]
     return obj
 
+
 # --- Telegram Alerting ---
 class AlertManager:
     def __init__(self, alert_configs_table):
@@ -77,7 +79,9 @@ class AlertManager:
                 response.raise_for_status()
                 logger.info(f"Telegram alert sent to chat ID {chat_id}.")
         except Exception as e:
-            logger.error(f"An unexpected error occurred while sending Telegram alert: {e}")
+            logger.error(
+                f"An unexpected error occurred while sending Telegram alert: {e}"
+            )
 
 
 # --- Anomaly Detection (Preserved from original file) ---
@@ -89,7 +93,7 @@ def detect_up_anomalies(metrics: List[Metric]) -> List[str]:
         up_metrics = [m for m in metrics if m.metric.get("__name__") == "up"]
         if len(up_metrics) < 2:
             return []
-        
+
         up_values = [float(m.value[1]) for m in up_metrics]
         X = np.array(up_values).reshape(-1, 1)
         preds = IsolationForest(contamination="auto", random_state=42).fit_predict(X)
@@ -107,7 +111,8 @@ def detect_up_anomalies(metrics: List[Metric]) -> List[str]:
         logger.error(f"Anomaly detection for 'up' metric failed: {e}")
     return anomalies
 
-async def detect_anomalies(metrics: List[Metric}, cluster_id: str) -> List[str]:
+
+async def detect_anomalies(metrics: List[Metric], cluster_id: str) -> List[str]:
     # For now, we only have the 'up' anomaly detection.
     # The CPU anomaly detection logic was complex and required historical data fetching,
     # which needs to be re-evaluated in a serverless context for performance.
@@ -145,13 +150,13 @@ async def handler(event, context):
 
         # --- Data Transformation and Storage ---
         metrics_for_anomaly_detection: List[Metric] = []
-        cluster_id = "unknown_cluster" # Default value
+        cluster_id = "unknown_cluster"  # Default value
 
         with table.batch_writer() as batch:
             for ts in write_request.timeseries:
                 labels = {label.name: label.value for label in ts.labels}
                 metric_name = labels.get("__name__", "")
-                
+
                 # Extract cluster_id from labels, a common pattern
                 if "cluster_id" in labels:
                     cluster_id = labels["cluster_id"]
@@ -159,15 +164,19 @@ async def handler(event, context):
                 for sample in ts.samples:
                     # Convert timestamp from ms to seconds (float) for consistency
                     timestamp_sec = sample.timestamp_ms / 1000.0
-                    
+
                     # 1. Prepare metric for anomaly detection
                     # The old format was [timestamp, value]
-                    metric_obj = Metric(metric=labels, value=[timestamp_sec, sample.value])
+                    metric_obj = Metric(
+                        metric=labels, value=[timestamp_sec, sample.value]
+                    )
                     metrics_for_anomaly_detection.append(metric_obj)
 
                     # 2. Prepare item for DynamoDB
                     # Create a unique identifier for the metric sample
-                    labels_str = "-".join(sorted([f"{k}={v}" for k, v in labels.items()]))
+                    labels_str = "-".join(
+                        sorted([f"{k}={v}" for k, v in labels.items()])
+                    )
                     labels_hash = hashlib.sha256(labels_str.encode()).hexdigest()
                     metric_identifier = f"{timestamp_sec}-{metric_name}-{labels_hash}"
 
@@ -177,13 +186,17 @@ async def handler(event, context):
                         "timestamp": Decimal(str(timestamp_sec)),
                         "metric_name": metric_name,
                         "metric_labels": convert_floats_to_decimals(labels),
-                        "metric_value": convert_floats_to_decimals([timestamp_sec, sample.value]),
+                        "metric_value": convert_floats_to_decimals(
+                            [timestamp_sec, sample.value]
+                        ),
                         "instance": labels.get("instance", "unknown"),
                         "job": labels.get("job", "unknown"),
                     }
                     batch.put_item(Item=item)
-        
-        logger.info(f"Successfully processed and stored {len(metrics_for_anomaly_detection)} metric samples for cluster: {cluster_id}.")
+
+        logger.info(
+            f"Successfully processed and stored {len(metrics_for_anomaly_detection)} metric samples for cluster: {cluster_id}."
+        )
 
         # --- Anomaly Detection and Alerting ---
         anomalies = await detect_anomalies(metrics_for_anomaly_detection, cluster_id)
@@ -199,7 +212,9 @@ async def handler(event, context):
                         alert_message = f"🚨 Anomaly Alert for Cluster `{cluster_id}` 🚨\n\n{anomaly}"
                         await alert_manager.send_telegram_alert(chat_id, alert_message)
                 else:
-                    logger.warning(f"No Telegram chat ID for cluster {cluster_id}. Logging alerts.")
+                    logger.warning(
+                        f"No Telegram chat ID for cluster {cluster_id}. Logging alerts."
+                    )
                     for anomaly in anomalies:
                         logger.warning(f"ALERT: {anomaly}")
             except Exception as e:
