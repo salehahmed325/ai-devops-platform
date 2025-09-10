@@ -44,3 +44,8 @@ variable "lambda_zip_key" {
   description = "The S3 key for the Lambda function deployment package (zip file)"
   type        = string
 }
+
+variable "lambda_layer_arn" {
+  description = "The ARN of the Lambda Layer containing large dependencies"
+  type        = string
+}

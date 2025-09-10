@@ -63,3 +63,9 @@ variable "lambda_environment_variables" {
   type        = map(string)
   default     = {}
 }
+
+variable "lambda_layer_arn" {
+  description = "The ARN of the Lambda Layer to attach to the function"
+  type        = string
+  default     = null # Make it optional
+}

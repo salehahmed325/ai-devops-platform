@@ -108,6 +108,7 @@ module "lambda_central_brain" {
   iam_role_arn   = module.iam.lambda_execution_role_arn
   s3_bucket_name = module.s3_lambda_code.bucket_name
   s3_key         = var.lambda_zip_key
+  lambda_layer_arn = var.lambda_layer_arn
   
   lambda_environment_variables = {
     API_KEY                           = var.api_key

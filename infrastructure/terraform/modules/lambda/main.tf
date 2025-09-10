@@ -15,4 +15,7 @@ resource "aws_lambda_function" "this" {
   }
 
   tags = var.tags
+
+  # Attach Lambda Layer if provided
+  layers = var.lambda_layer_arn == null ? [] : [var.lambda_layer_arn]
 }
