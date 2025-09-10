@@ -17,6 +17,12 @@ from sklearn.ensemble import IsolationForest
 # Import the generated protobuf file
 from prompb import remote_pb2
 
+# Import types for boto3 for better static analysis
+from mypy_boto3_dynamodb.service_resource import (
+    DynamoDBServiceResource,
+    Table,
+)
+
 
 # --- Configuration ---
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -34,16 +40,15 @@ logger = logging.getLogger()
 logger.setLevel(LOG_LEVEL)
 
 # --- DynamoDB Setup ---
-dynamodb = boto3.resource("dynamodb")
-table = dynamodb.Table(DYNAMODB_TABLE_NAME)
-logs_table = dynamodb.Table(DYNAMODB_LOGS_TABLE_NAME)
-alert_configs_table = dynamodb.Table(
+dynamodb: DynamoDBServiceResource = boto3.resource("dynamodb")
+table: Table = dynamodb.Table(DYNAMODB_TABLE_NAME)
+logs_table: Table = dynamodb.Table(DYNAMODB_LOGS_TABLE_NAME)
+alert_configs_table: Table = dynamodb.Table(
     os.getenv("DYNAMODB_ALERT_CONFIGS_TABLE_NAME", "ai-devops-platform-alert-configs")
 )
 
 
 # --- Data Models ---
-# Replaced Pydantic's BaseModel with a lighter dataclass for the Lambda environment
 @dataclass
 class Metric:
     metric: Dict[str, str]
@@ -63,7 +68,7 @@ def convert_floats_to_decimals(obj):
 
 # --- Telegram Alerting ---
 class AlertManager:
-    def __init__(self, alert_configs_table):
+    def __init__(self, alert_configs_table: Table):
         self.alert_configs_table = alert_configs_table
 
     async def send_telegram_alert(self, chat_id: str, message: str):
@@ -84,8 +89,6 @@ class AlertManager:
 
 
 # --- Anomaly Detection (Preserved from original file) ---
-# NOTE: These functions are synchronous and will run within the async handler.
-# For very high-performance needs, they could be run in a separate thread pool.
 def detect_up_anomalies(metrics: List[Metric]) -> List[str]:
     anomalies = []
     try:
@@ -112,19 +115,12 @@ def detect_up_anomalies(metrics: List[Metric]) -> List[str]:
 
 
 async def detect_anomalies(metrics: List[Metric], cluster_id: str) -> List[str]:
-    # For now, we only have the 'up' anomaly detection.
-    # The CPU anomaly detection logic was complex and required historical data fetching,
-    # which needs to be re-evaluated in a serverless context for performance.
-    # This is a placeholder for future, more sophisticated anomaly detection.
     all_anomalies = detect_up_anomalies(metrics)
     return all_anomalies
 
 
 # --- Main Lambda Handler ---
 async def handler(event, context):
-    """
-    AWS Lambda handler for ingesting Prometheus remote_write requests.
-    """
     try:
         # --- Security Check ---
         headers = event.get("headers", {})
@@ -142,37 +138,29 @@ async def handler(event, context):
             logger.warning("Request body is empty.")
             return {"statusCode": 400, "body": "Bad Request: Empty body"}
 
-        # Decompress and parse the protobuf message
         uncompressed_data = snappy.uncompress(body)
-        write_request.ParseFromString(uncompressed_data)  # type: ignore
         write_request = remote_pb2.WriteRequest()
+        write_request.ParseFromString(uncompressed_data)  # type: ignore
 
         # --- Data Transformation and Storage ---
         metrics_for_anomaly_detection: List[Metric] = []
-        cluster_id = "unknown_cluster"  # Default value
+        cluster_id = "unknown_cluster"
 
         with table.batch_writer() as batch:
             for ts in write_request.timeseries:  # type: ignore
                 labels = {label.name: label.value for label in ts.labels}
                 metric_name = labels.get("__name__", "")
 
-                # Extract cluster_id from labels, a common pattern
                 if "cluster_id" in labels:
                     cluster_id = labels["cluster_id"]
 
                 for sample in ts.samples:
-                    # Convert timestamp from ms to seconds (float) for consistency
                     timestamp_sec = sample.timestamp_ms / 1000.0
-
-                    # 1. Prepare metric for anomaly detection
-                    # The old format was [timestamp, value]
                     metric_obj = Metric(
                         metric=labels, value=[timestamp_sec, sample.value]
                     )
                     metrics_for_anomaly_detection.append(metric_obj)
 
-                    # 2. Prepare item for DynamoDB
-                    # Create a unique identifier for the metric sample
                     labels_str = "-".join(
                         sorted([f"{k}={v}" for k, v in labels.items()])
                     )
@@ -194,7 +182,8 @@ async def handler(event, context):
                     batch.put_item(Item=item)
 
         logger.info(
-            f"Successfully processed and stored {len(metrics_for_anomaly_detection)} metric samples for cluster: {cluster_id}."
+            f"Successfully processed and stored "
+            f"{len(metrics_for_anomaly_detection)} metric samples for cluster: {cluster_id}."
         )
 
         # --- Anomaly Detection and Alerting ---
@@ -202,13 +191,12 @@ async def handler(event, context):
         if anomalies:
             alert_manager = AlertManager(alert_configs_table)
             try:
-                # This logic for getting chat_id should be adapted if needed
                 response = alert_configs_table.get_item(Key={"cluster_id": cluster_id})
                 config_item = response.get("Item")
                 if config_item and "telegram_chat_id" in config_item:
                     chat_id = str(config_item["telegram_chat_id"])
                     for anomaly in anomalies:
-                        alert_message = new_func(cluster_id, anomaly)
+                        alert_message = f"🚨 Anomaly Alert for Cluster `{cluster_id}` 🚨\n\n{anomaly}"
                         await alert_manager.send_telegram_alert(chat_id, alert_message)
                 else:
                     logger.warning(
@@ -230,8 +218,3 @@ async def handler(event, context):
     except Exception as e:
         logger.error(f"An unexpected error occurred: {e}", exc_info=True)
         return {"statusCode": 500, "body": "Internal Server Error"}
-
-
-def new_func(cluster_id, anomaly):
-    alert_message = f"🚨 Anomaly Alert for Cluster `{cluster_id}` 🚨\n\n{anomaly}"
-    return alert_message
