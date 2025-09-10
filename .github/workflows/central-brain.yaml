@@ -31,7 +31,7 @@
      - name: Create Layer Package
        run: |
          mkdir -p python # Standard structure for Python layers
-         pip install numpy scikit-learn -t python # Install large dependencies
+         pip install -t python # Install large dependencies
          zip -r layer.zip python # Zip the python directory
  
      - name: Configure AWS credentials
