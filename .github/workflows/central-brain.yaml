@@ -26,7 +26,7 @@ jobs:
 
     - name: Install dependencies and tools
       run: |
-        pip install black flake8 zip
+        pip install black flake8
         if [ -f central-brain/src/requirements.txt ]; then pip install -r central-brain/src/requirements.txt; fi
 
     - name: Lint and Format Check
