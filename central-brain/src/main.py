@@ -184,7 +184,7 @@ async def handler(event, context):
         logger.info(
             f"Successfully processed and stored "
             f"{len(metrics_for_anomaly_detection)} metric samples for cluster: {cluster_id}."
-        )
+        )  # noqa: E501
 
         # --- Anomaly Detection and Alerting ---
         anomalies = await detect_anomalies(metrics_for_anomaly_detection, cluster_id)
@@ -197,7 +197,9 @@ async def handler(event, context):
                     chat_id = str(config_item["telegram_chat_id"])
                     for anomaly in anomalies:
                         alert_message = f"🚨 Anomaly Alert for Cluster `{cluster_id}` 🚨\\n\\n{anomaly}"
-                        await alert_manager.send_telegram_alert(chat_id, alert_message)
+                        await alert_manager.send_telegram_alert(
+                            chat_id, alert_message
+                        )  # noqa: E501
                 else:
                     logger.warning(
                         f"No Telegram chat ID for cluster {cluster_id}. "
