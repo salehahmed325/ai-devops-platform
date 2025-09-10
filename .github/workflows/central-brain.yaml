@@ -31,8 +31,8 @@ jobs:
     - name: Create Lambda Deployment Package
       run: |
       # Removed: pip install zip
-      cd central-brain/src
-      zip -r ../../central-brain-deployment.zip .
+        cd central-brain/src
+        zip -r ../../central-brain-deployment.zip .
  
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
