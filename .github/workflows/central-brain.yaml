@@ -1,54 +1,49 @@
 name: Build and Deploy Central Brain
- 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
     paths:
-    - 'central-brain/**'
-    - '.github/workflows/central-brain.yaml'
-  workflow_dispatch:
-
+      - central-brain/**
+      - .github/workflows/central-brain.yaml
+  workflow_dispatch: null
 env:
   AWS_REGION: us-east-1
   TF_VERSION: 1.6.0
- 
 jobs:
   build:
     name: Build Lambda Package
     runs-on: ubuntu-latest
     outputs:
       lambda_zip_key: ${{ steps.upload_s3.outputs.zip_key }}
- 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
- 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.9'
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+      - name: Create Lambda Deployment Package
+        run: |
+          # Removed: pip install zip
+          cd central-brain/src
+          zip -r ../../central-brain-deployment.zip .
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Upload Lambda Package to S3
+        id: upload_s3
+        run: >
+          S3_BUCKET="ai-devops-platform-lambda-code-${{ secrets.AWS_ACCOUNT_ID }}"
 
-    - name: Create Lambda Deployment Package
-      run: |
-      # Removed: pip install zip
-        cd central-brain/src
-        zip -r ../../central-brain-deployment.zip .
- 
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
- 
-    - name: Upload Lambda Package to S3
-      id: upload_s3
-      run: |
-        S3_BUCKET="ai-devops-platform-lambda-code-${{ secrets.AWS_ACCOUNT_ID }}"
-        ZIP_KEY="central-brain-${{ github.sha }}.zip"
-        aws s3 cp central-brain-deployment.zip s3://$S3_BUCKET/$ZIP_KEY
-        echo "zip_key=$ZIP_KEY" >> $GITHUB_OUTPUT
+          ZIP_KEY="central-brain-${{ github.sha }}.zip"
 
+          aws s3 cp central-brain-deployment.zip s3://$S3_BUCKET/$ZIP_KEY
+
+          echo "zip_key=$ZIP_KEY" >> $GITHUB_OUTPUT
   deploy:
     name: Deploy to AWS
     runs-on: ubuntu-latest
@@ -62,30 +57,29 @@ jobs:
       TF_VAR_telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TF_VAR_api_key: ${{ secrets.API_KEY }}
       TF_VAR_lambda_zip_key: ${{ needs.build.outputs.lambda_zip_key }}
- 
     steps:
-     - name: Checkout code
+      - name: Checkout code
         uses: actions/checkout@v4
-
-     - name: Setup Terraform
+      - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
-
-     - name: Configure AWS credentials
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-   
-     - name: Terraform Init
-        run: |
+      - name: Terraform Init
+        run: >
           terraform init \
+
           -backend-config="bucket=ai-devops-platform-tfstate-${{ secrets.AWS_ACCOUNT_ID }}" \
+
           -backend-config="key=terraform.tfstate" \
+
           -backend-config="region=${{ env.AWS_REGION }}" \
+
           -backend-config="encrypt=true"
- 
-     - name: Terraform Apply
+      - name: Terraform Apply
         run: terraform apply -auto-approve -input=false
