@@ -1,28 +1,28 @@
 name: Build and Deploy Central Brain
-
+ 
 on:
   push:
     branches: [ main ]
     paths:
-      - 'central-brain/**'
-      - '.github/workflows/central-brain.yaml'
+    - 'central-brain/**'
+    - '.github/workflows/central-brain.yaml'
   workflow_dispatch:
 
 env:
   AWS_REGION: us-east-1
   TF_VERSION: 1.6.0
-
+ 
 jobs:
   build:
     name: Build Lambda Package
     runs-on: ubuntu-latest
     outputs:
       lambda_zip_key: ${{ steps.upload_s3.outputs.zip_key }}
-
+ 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-
+ 
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
@@ -30,17 +30,17 @@ jobs:
 
     - name: Create Lambda Deployment Package
       run: |
-        pip install zip
-        cd central-brain/src
-        zip -r ../../central-brain-deployment.zip .
-
+      # Removed: pip install zip
+      cd central-brain/src
+      zip -r ../../central-brain-deployment.zip .
+ 
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ env.AWS_REGION }}
-
+ 
     - name: Upload Lambda Package to S3
       id: upload_s3
       run: |
@@ -62,30 +62,30 @@ jobs:
       TF_VAR_telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TF_VAR_api_key: ${{ secrets.API_KEY }}
       TF_VAR_lambda_zip_key: ${{ needs.build.outputs.lambda_zip_key }}
-
+ 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+     - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v3
-      with:
-        terraform_version: ${{ env.TF_VERSION }}
+     - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
 
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
-
-    - name: Terraform Init
-      run: |
-        terraform init \
+     - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+   
+     - name: Terraform Init
+        run: |
+          terraform init \
           -backend-config="bucket=ai-devops-platform-tfstate-${{ secrets.AWS_ACCOUNT_ID }}" \
           -backend-config="key=terraform.tfstate" \
           -backend-config="region=${{ env.AWS_REGION }}" \
           -backend-config="encrypt=true"
-
-    - name: Terraform Apply
-      run: terraform apply -auto-approve -input=false
+ 
+     - name: Terraform Apply
+        run: terraform apply -auto-approve -input=false
