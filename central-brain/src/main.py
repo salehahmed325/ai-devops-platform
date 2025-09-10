@@ -223,7 +223,10 @@ async def handler(event, context):
 
     except snappy.UncompressError:
         logger.error("Invalid snappy compressed data received.")
-        return {"statusCode": 400, "body": "Bad Request: Invalid snappy compression"}
+        return {
+            "statusCode": 400,
+            "body": "Bad Request: Invalid snappy compression",
+        }
     except Exception as e:
         logger.error(f"An unexpected error occurred: {e}", exc_info=True)
         return {"statusCode": 500, "body": "Internal Server Error"}
