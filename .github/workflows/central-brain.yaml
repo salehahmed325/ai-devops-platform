@@ -1,20 +1,24 @@
-name: Build and Deploy Central Brain Lambda
+name: Build and Deploy Central Brain
 
 on:
-  workflow_dispatch:
   push:
     branches: [ main ]
     paths:
       - 'central-brain/**'
       - '.github/workflows/central-brain.yaml'
+  workflow_dispatch:
 
 env:
   AWS_REGION: us-east-1
+  TF_VERSION: 1.6.0
 
 jobs:
-  build-and-deploy-central-brain:
-    name: Build and Deploy Central Brain Lambda
+  build:
+    name: Build Lambda Package
     runs-on: ubuntu-latest
+    outputs:
+      lambda_zip_key: ${{ steps.upload_s3.outputs.zip_key }}
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -22,32 +26,15 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.9' # Using Python 3.9 for Lambda compatibility
-
-    - name: Install dependencies and tools
-      run: |
-        pip install black flake8
-        if [ -f central-brain/src/requirements.txt ]; then pip install -r central-brain/src/requirements.txt; fi
-
-    - name: Lint and Format Check
-      run: |
-        black --check central-brain/
-        flake8 central-brain/
+        python-version: '3.9'
 
     - name: Create Lambda Deployment Package
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       run: |
-        echo "Creating deployment package..."
-        mkdir package
-        pip install -r central-brain/src/requirements.txt -t ./package
-        cp -r central-brain/src/* ./package/
-        cd package
-        zip -r ../central-brain-deployment.zip .
-        cd ..
-        echo "Deployment package created."
+        pip install zip
+        cd central-brain/src
+        zip -r ../../central-brain-deployment.zip .
 
     - name: Configure AWS credentials
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       uses: aws-actions/configure-aws-credentials@v4
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -55,19 +42,50 @@ jobs:
         aws-region: ${{ env.AWS_REGION }}
 
     - name: Upload Lambda Package to S3
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      id: upload_s3
       run: |
         S3_BUCKET="ai-devops-platform-lambda-code-${{ secrets.AWS_ACCOUNT_ID }}"
         ZIP_KEY="central-brain-${{ github.sha }}.zip"
         aws s3 cp central-brain-deployment.zip s3://$S3_BUCKET/$ZIP_KEY
-        echo "Uploaded to s3://$S3_BUCKET/$ZIP_KEY"
-        # Save the S3 key for the Terraform workflow
-        mkdir -p artifacts
-        echo $ZIP_KEY > artifacts/lambda_zip_key.txt
+        echo "zip_key=$ZIP_KEY" >> $GITHUB_OUTPUT
 
-    - name: Upload Lambda Zip Key Artifact
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-      uses: actions/upload-artifact@v4
+  deploy:
+    name: Deploy to AWS
+    runs-on: ubuntu-latest
+    needs: build
+    defaults:
+      run:
+        shell: bash
+        working-directory: infrastructure/terraform
+    env:
+      TF_VAR_aws_account_id: ${{ secrets.AWS_ACCOUNT_ID }}
+      TF_VAR_telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TF_VAR_api_key: ${{ secrets.API_KEY }}
+      TF_VAR_lambda_zip_key: ${{ needs.build.outputs.lambda_zip_key }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
       with:
-        name: central-brain-lambda-zip-key
-        path: artifacts/lambda_zip_key.txt
+        terraform_version: ${{ env.TF_VERSION }}
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Terraform Init
+      run: |
+        terraform init \
+          -backend-config="bucket=ai-devops-platform-tfstate-${{ secrets.AWS_ACCOUNT_ID }}" \
+          -backend-config="key=terraform.tfstate" \
+          -backend-config="region=${{ env.AWS_REGION }}" \
+          -backend-config="encrypt=true"
+
+    - name: Terraform Apply
+      run: terraform apply -auto-approve -input=false
