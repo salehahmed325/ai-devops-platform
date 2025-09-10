@@ -92,6 +92,4 @@ jobs:
             -backend-config="region=${{ env.AWS_REGION }}" \
             -backend-config="encrypt=true"
       - name: Terraform Apply
-        run: >-
-          terraform apply -auto-approve -input=falseCopy-paste code here to
-          remove the line numbers.
+        run: terraform apply -auto-approve -input=false
