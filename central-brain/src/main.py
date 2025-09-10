@@ -144,15 +144,15 @@ async def handler(event, context):
 
         # Decompress and parse the protobuf message
         uncompressed_data = snappy.uncompress(body)
+        write_request.ParseFromString(uncompressed_data)  # type: ignore
         write_request = remote_pb2.WriteRequest()
-        write_request.ParseFromString(uncompressed_data)
 
         # --- Data Transformation and Storage ---
         metrics_for_anomaly_detection: List[Metric] = []
         cluster_id = "unknown_cluster"  # Default value
 
         with table.batch_writer() as batch:
-            for ts in write_request.timeseries:
+            for ts in write_request.timeseries:  # type: ignore
                 labels = {label.name: label.value for label in ts.labels}
                 metric_name = labels.get("__name__", "")
 
@@ -206,9 +206,9 @@ async def handler(event, context):
                 response = alert_configs_table.get_item(Key={"cluster_id": cluster_id})
                 config_item = response.get("Item")
                 if config_item and "telegram_chat_id" in config_item:
-                    chat_id = config_item["telegram_chat_id"]
+                    chat_id = str(config_item["telegram_chat_id"])
                     for anomaly in anomalies:
-                        alert_message = f"🚨 Anomaly Alert for Cluster `{cluster_id}` 🚨\n\n{anomaly}"
+                        alert_message = new_func(cluster_id, anomaly)
                         await alert_manager.send_telegram_alert(chat_id, alert_message)
                 else:
                     logger.warning(
@@ -230,3 +230,8 @@ async def handler(event, context):
     except Exception as e:
         logger.error(f"An unexpected error occurred: {e}", exc_info=True)
         return {"statusCode": 500, "body": "Internal Server Error"}
+
+
+def new_func(cluster_id, anomaly):
+    alert_message = f"🚨 Anomaly Alert for Cluster `{cluster_id}` 🚨\n\n{anomaly}"
+    return alert_message
