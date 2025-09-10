@@ -5,14 +5,13 @@ import logging
 import base64
 import hashlib
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from dataclasses import dataclass
 
 import boto3
 import httpx
 import numpy as np
 import snappy
-from boto3.dynamodb.conditions import Key, Attr
 from sklearn.ensemble import IsolationForest
 
 # Import the generated protobuf file
