@@ -33,7 +33,7 @@ DYNAMODB_LOGS_TABLE_NAME = os.getenv(
 )
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_API_URL = (
-    f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"  # noqa: E501
 )
 
 # --- Logging Setup ---
@@ -48,7 +48,7 @@ logs_table: Table = dynamodb.Table(DYNAMODB_LOGS_TABLE_NAME)
 alert_configs_table: Table = dynamodb.Table(
     os.getenv(
         "DYNAMODB_ALERT_CONFIGS_TABLE_NAME", "ai-devops-platform-alert-configs"
-    )
+    )  # noqa: E501
 )
 
 
@@ -79,9 +79,8 @@ class AlertManager:
         if not TELEGRAM_BOT_TOKEN:
             logger.warning(
                 (
-                    "TELEGRAM_BOT_TOKEN is not set. "
-                    "Cannot send Telegram alert."
-                )
+                    "TELEGRAM_BOT_TOKEN is not set. " "Cannot send Telegram alert."
+                )  # noqa: E501
             )
             return
 
@@ -107,9 +106,9 @@ def detect_up_anomalies(metrics: List[Metric]) -> List[str]:
 
         up_values = [float(m.value[1]) for m in up_metrics]
         X = np.array(up_values).reshape(-1, 1)
-        preds = IsolationForest(
-            contamination="auto", random_state=42
-        ).fit_predict(X)
+        preds = IsolationForest(contamination="auto", random_state=42).fit_predict(
+            X
+        )  # noqa: E501
 
         for i, pred in enumerate(preds):
             if pred == -1:
@@ -177,13 +176,13 @@ async def handler(event, context):
                     )
                     labels_hash = hashlib.sha256(labels_str.encode()).hexdigest()
                     metric_identifier = (
-                        f"{timestamp_sec}-{metric_name}-{labels_hash}"
+                        f"{timestamp_sec}-{metric_name}-{labels_hash}"  # noqa: E501
                     )
 
                     item = {
                         "cluster_id": labels.get(
                             "cluster_id", "unknown_cluster"
-                        ),
+                        ),  # noqa: E501
                         "metric_identifier": metric_identifier,
                         "timestamp": Decimal(str(timestamp_sec)),
                         "metric_name": metric_name,
@@ -206,23 +205,21 @@ async def handler(event, context):
         # --- Anomaly Detection and Alerting ---
         anomalies = await detect_anomalies(
             metrics_for_anomaly_detection, cluster_id
-        )
+        )  # noqa: E501
         if anomalies:
             alert_manager = AlertManager(alert_configs_table)
             try:
                 response = alert_configs_table.get_item(
                     Key={"cluster_id": cluster_id}
-                )
-                config_item = response.get("Item")
+                )  # noqa: E501
+                config_item = response.get("Item")  # noqa: E501
                 if config_item and "telegram_chat_id" in config_item:
                     chat_id = str(config_item["telegram_chat_id"])
                     for anomaly in anomalies:
-                        alert_message = (
-                            f"🚨 Anomaly Alert for Cluster `{cluster_id}` 🚨\n\n{anomaly}"
-                        )
+                        alert_message = f"🚨 Anomaly Alert for Cluster `{cluster_id}` 🚨\n\n{anomaly}"  # noqa: E501
                         await alert_manager.send_telegram_alert(
                             chat_id, alert_message
-                        )
+                        )  # noqa: E501
                 else:
                     logger.warning(
                         (
