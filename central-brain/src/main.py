@@ -1,5 +1,3 @@
-
-
 import os
 import logging
 import base64
@@ -23,8 +21,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\x0csimple.proto"#\n\x06Person\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0b\n\x03id\x18\x02 \x01(\x05\x62\x06proto3'
+  serialized_pb=b'\n\x0csimple.proto"#\n\x06Person\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0b\n\x03id\x18\x02 \x01(\x05b\x06proto3'
 )
 
 _PERSON = _descriptor.Descriptor(
@@ -33,7 +30,6 @@ _PERSON = _descriptor.Descriptor(
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
-  create_key=_descriptor._internal_create_key,
   fields=[
     _descriptor.FieldDescriptor(
       name='name', full_name='Person.name', index=0,
@@ -61,7 +57,6 @@ _PERSON = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  create_key=_descriptor._internal_create_key,
   serialized_start=16,
   serialized_end=51
 )
