@@ -12,8 +12,81 @@ import boto3
 import httpx
 
 
-# Import the generated protobuf file
-from prompb import remote_pb2
+from __future__ import annotations
+
+import os
+import logging
+import base64
+import hashlib
+from decimal import Decimal
+from typing import Any, Dict, List
+from dataclasses import dataclass
+
+import boto3
+import httpx
+
+from google.protobuf import descriptor as _descriptor
+from google.protobuf import message as _message
+from google.protobuf import reflection as _reflection
+from google.protobuf import symbol_database as _symbol_database
+
+_sym_db = _symbol_database.Default()
+
+DESCRIPTOR = _descriptor.FileDescriptor(
+  name='simple.proto',
+  package='',
+  syntax='proto3',
+  serialized_options=None,
+  create_key=_descriptor._internal_create_key,
+  serialized_pb=b'\n\x0csimple.proto"#\n\x06Person\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0b\n\x03id\x18\x02 \x01(\x05\x62\x06proto3'
+)
+
+_PERSON = _descriptor.Descriptor(
+  name='Person',
+  full_name='Person',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='name', full_name='Person.name', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='id', full_name='Person.id', index=1,
+      number=2, type=5, cpp_type=1, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  create_key=_descriptor._internal_create_key,
+  serialized_start=16,
+  serialized_end=51
+)
+
+Person = _reflection.GeneratedProtocolMessageType('Person', (_message.Message,), {
+  'DESCRIPTOR' : _PERSON,
+  '__module__' : 'simple_pb2'
+  # @@protoc_insertion_point(class_scope:Person)
+  })
+_sym_db.RegisterMessage(Person)
+
 
 # Import types for boto3 for better static analysis
 from mypy_boto3_dynamodb.service_resource import (
@@ -116,91 +189,18 @@ def handler(event, context):
             logger.warning("Request body is empty.")
             return {"statusCode": 400, "body": "Bad Request: Empty body"}
 
-        write_request = remote_pb2.WriteRequest()
-        write_request.ParseFromString(body)  # type: ignore
+        # Hardcoded binary data for a Person message (name="Test", id=123)
+        # This is equivalent to: Person(name="Test", id=123).SerializeToString()
+        # You can generate this using: 
+        # from simple_pb2 import Person
+        # p = Person(name="Test", id=123)
+        # print(p.SerializeToString())
+        hardcoded_protobuf_data = b'\n\x04Test\x10{'
 
-        # --- Data Transformation and Storage ---
-        metrics_for_anomaly_detection: List[Metric] = []
-        cluster_id = "unknown_cluster"
+        person_message = Person()
+        person_message.ParseFromString(hardcoded_protobuf_data)
 
-        with table.batch_writer() as batch:
-            for ts in write_request.timeseries:  # type: ignore
-                labels = {label.name: label.value for label in ts.labels}
-                metric_name = labels.get("__name__", "")
-
-                if "cluster_id" in labels:
-                    cluster_id = labels["cluster_id"]
-
-                for sample in ts.samples:
-                    timestamp_sec = sample.timestamp_ms / 1000.0
-                    metric_obj = Metric(
-                        metric=labels, value=[timestamp_sec, sample.value]
-                    )
-                    metrics_for_anomaly_detection.append(metric_obj)
-
-                    labels_str = "-".join(
-                        sorted([f"{k}={v}" for k, v in labels.items()])
-                    )
-                    labels_hash = hashlib.sha256(labels_str.encode()).hexdigest()
-                    metric_identifier = (
-                        f"{timestamp_sec}-{metric_name}-{labels_hash}"
-                    )
-
-                    item = {
-                        "cluster_id": labels.get(
-                            "cluster_id", "unknown_cluster"
-                        ),
-                        "metric_identifier": metric_identifier,
-                        "timestamp": Decimal(str(timestamp_sec)),
-                        "metric_name": metric_name,
-                        "metric_labels": convert_floats_to_decimals(labels),
-                        "metric_value": convert_floats_to_decimals(
-                            [timestamp_sec, sample.value]
-                        ),
-                        "instance": labels.get("instance", "unknown"),
-                        "job": labels.get("job", "unknown"),
-                    }
-                    batch.put_item(Item=item)
-
-        logger.info(
-            (
-                f"Successfully processed and stored "
-                f"{len(metrics_for_anomaly_detection)} metric samples for cluster: {cluster_id}."
-            )
-        )
-
-        # --- Anomaly Detection and Alerting ---
-        # Anomaly detection is temporarily disabled due to Lambda size limits.
-        # anomalies = await detect_anomalies(
-        #     metrics_for_anomaly_detection, cluster_id
-        # )
-        # if anomalies:
-        #     alert_manager = AlertManager(alert_configs_table)
-        #     try:
-        #         response = alert_configs_table.get_item(
-        #             Key={"cluster_id": cluster_id}
-        #         )
-        #         config_item = response.get("Item")
-        #         if config_item and "telegram_chat_id" in config_item:
-        #             chat_id = str(config_item["telegram_chat_id"])
-        #             for anomaly in anomalies:
-        #                 alert_message = (
-        #                     f"🚨 Anomaly Alert for Cluster `{cluster_id}` 🚨\n\n{anomaly}"
-        #                 )
-        #                 await alert_manager.send_telegram_alert(
-        #                     chat_id, alert_message
-        #                 )
-        #         else:
-        #             logger.warning(
-        #                 (
-        #                     f"No Telegram chat ID for cluster {cluster_id}. "
-        #                     f"Logging alerts."
-        #                 )
-        #             )
-        #             for anomaly in anomalies:
-        #                 logger.warning(f"ALERT: {anomaly}")
-        #     except Exception as e:
-        #         logger.error(f"Failed to send Telegram alert: {e}")
+        logger.info(f"Parsed Person message: Name={person_message.name}, ID={person_message.id}")
 
         return {"statusCode": 200, "body": "Success"}
 
