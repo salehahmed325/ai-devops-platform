@@ -45,7 +45,4 @@ variable "lambda_zip_key" {
   type        = string
 }
 
-variable "lambda_layer_arn" {
-  description = "The ARN of the Lambda Layer containing large dependencies"
-  type        = string
-}
+
