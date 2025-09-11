@@ -66,3 +66,89 @@ def convert_floats_to_decimals(obj):
     return obj
 
 
+# --- Main Lambda Handler ---
+def handler(event, context):
+    try:
+        # --- Security Check ---
+        headers = event.get("headers", {})
+        logger.info(f"Received headers: {headers}")
+        api_key_received = headers.get("x-api-key")
+        logger.info(f"API Key received from headers: {api_key_received}")
+        if api_key_received != API_KEY:
+            logger.warning("Invalid or missing API Key.")
+            return {"statusCode": 403, "body": "Forbidden: Invalid API Key"}
+
+        # --- Request Body Processing ---
+        body = event.get("body", "")
+        
+        if not body:
+            logger.warning("Request body is empty.")
+            return {"statusCode": 400, "body": "Bad Request: Empty body"}
+
+        try:
+            parsed_json_body = json.loads(body)
+            logger.info(f"Received JSON body: {parsed_json_body}")
+        except json.JSONDecodeError as e:
+            logger.error(f"Error decoding JSON body: {e}")
+            return {"statusCode": 400, "body": "Bad Request: Invalid JSON body"}
+
+        # --- Data Transformation and Storage ---
+        metrics_for_anomaly_detection: List[Metric] = []
+        cluster_id = "unknown_cluster"
+
+        with table.batch_writer() as batch:
+            for ts_data in parsed_json_body.get("timeseries", []):
+                labels = ts_data.get("labels", {})
+                metric_name = labels.get("__name__", "")
+
+                if "cluster_id" in labels:
+                    cluster_id = labels["cluster_id"]
+
+                for sample_data in ts_data.get("samples", []):
+                    timestamp_sec = sample_data.get("timestamp_ms", 0) / 1000.0
+                    metric_value = sample_data.get("value", 0.0)
+
+                    metric_obj = Metric(
+                        metric=labels, value=[timestamp_sec, metric_value]
+                    )
+                    metrics_for_anomaly_detection.append(metric_obj)
+
+                    labels_str = "-".join(
+                        sorted([f"{k}={v}" for k, v in labels.items()])
+                    )
+                    labels_hash = hashlib.sha256(labels_str.encode()).hexdigest()
+                    metric_identifier = (
+                        f"{timestamp_sec}-{metric_name}-{labels_hash}"
+                    )
+
+                    item = {
+                        "cluster_id": labels.get(
+                            "cluster_id", "unknown_cluster"
+                        ),
+                        "metric_identifier": metric_identifier,
+                        "timestamp": Decimal(str(timestamp_sec)),
+                        "metric_name": metric_name,
+                        "metric_labels": convert_floats_to_decimals(labels),
+                        "metric_value": convert_floats_to_decimals(
+                            [timestamp_sec, metric_value]
+                        ),
+                        "instance": labels.get("instance", "unknown"),
+                        "job": labels.get("job", "unknown"),
+                    }
+                    batch.put_item(Item=item)
+
+        logger.info(
+            (
+                f"Successfully processed and stored "
+                f"{len(metrics_for_anomaly_detection)} metric samples for cluster: {cluster_id}."
+            )
+        )
+
+        return {"statusCode": 200, "body": "Success"}
+
+    
+    except Exception as e:
+        logger.error(f"An unexpected error occurred: {e}", exc_info=True)
+        return {"statusCode": 500, "body": "Internal Server Error"}
+
+# Small change to trigger CI/CD pipeline.
