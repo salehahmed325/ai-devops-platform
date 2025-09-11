@@ -17,31 +17,24 @@ from google.protobuf import symbol_database as _symbol_database
 _sym_db = _symbol_database.Default()
 
 DESCRIPTOR = _descriptor.FileDescriptor(
-  name='simple.proto',
+  name='message.proto',
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=b'\n\x0csimple.proto"#\n\x06Person\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0b\n\x03id\x18\x02 \x01(\x05b\x06proto3'
+  serialized_pb=b'\n\tmessage.proto"\x16\n\x07Message\x12\x0b\n\x03value\x18\x01 \x01(\t'
 )
 
-_PERSON = _descriptor.Descriptor(
-  name='Person',
-  full_name='Person',
+_MESSAGE = _descriptor.Descriptor(
+  name='Message',
+  full_name='Message',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='name', full_name='Person.name', index=0,
+      name='value', full_name='Message.value', index=0,
       number=1, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-    _descriptor.FieldDescriptor(
-      name='id', full_name='Person.id', index=1,
-      number=2, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
@@ -57,16 +50,16 @@ _PERSON = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=16,
-  serialized_end=51
+  serialized_start=15,
+  serialized_end=37
 )
 
-Person = _reflection.GeneratedProtocolMessageType('Person', (_message.Message,), {
-  'DESCRIPTOR' : _PERSON,
-  '__module__' : 'simple_pb2'
-  # @@protoc_insertion_point(class_scope:Person)
+Message = _reflection.GeneratedProtocolMessageType('Message', (_message.Message,), {
+  'DESCRIPTOR' : _MESSAGE,
+  '__module__' : 'message_pb2'
+  # @@protoc_insertion_point(class_scope:Message)
   })
-_sym_db.RegisterMessage(Person)
+_sym_db.RegisterMessage(Message)
 
 
 # Import types for boto3 for better static analysis
@@ -176,12 +169,12 @@ def handler(event, context):
         # from simple_pb2 import Person
         # p = Person(name="Test", id=123)
         # print(p.SerializeToString())
-        hardcoded_protobuf_data = b'\n\x04Test\x10{'
+        hardcoded_protobuf_data = b'\n\x05Hello'
 
-        person_message = Person()
-        person_message.ParseFromString(hardcoded_protobuf_data)
+        message = Message()
+        message.ParseFromString(hardcoded_protobuf_data)
 
-        logger.info(f"Parsed Person message: Name={person_message.name}, ID={person_message.id}")
+        logger.info(f"Parsed Message: Value={message.value}")
 
         return {"statusCode": 200, "body": "Success"}
 
