@@ -117,10 +117,9 @@ def handler(event, context):
             logger.warning("Request body is empty.")
             return {"statusCode": 400, "body": "Bad Request: Empty body"}
 
-        # uncompressed_data = snappy.uncompress(body)
-        # write_request = remote_pb2.WriteRequest()
-        # write_request.ParseFromString(uncompressed_data)  # type: ignore
-        logger.info(f"Received body (base64 decoded): {body}")
+        uncompressed_data = snappy.uncompress(body)
+        write_request = remote_pb2.WriteRequest()
+        write_request.ParseFromString(uncompressed_data)  # type: ignore
 
         # --- Data Transformation and Storage ---
         metrics_for_anomaly_detection: List[Metric] = []
