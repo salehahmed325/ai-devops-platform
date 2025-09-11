@@ -119,11 +119,87 @@ def handler(event, context):
             logger.error(f"Error decoding JSON body: {e}")
             return {"statusCode": 400, "body": "Bad Request: Invalid JSON body"}
 
-        return {"statusCode": 200, "body": "Success"}
+        # --- Data Transformation and Storage ---
+        metrics_for_anomaly_detection: List[Metric] = []
+        cluster_id = "unknown_cluster"
 
-    
-    except Exception as e:
-        logger.error(f"An unexpected error occurred: {e}", exc_info=True)
-        return {"statusCode": 500, "body": "Internal Server Error"}
+        with table.batch_writer() as batch:
+            for ts_data in parsed_json_body.get("timeseries", []):
+                labels = ts_data.get("labels", {})
+                metric_name = labels.get("__name__", "")
 
-# Small change to trigger CI/CD pipeline.
+                if "cluster_id" in labels:
+                    cluster_id = labels["cluster_id"]
+
+                for sample_data in ts_data.get("samples", []):
+                    timestamp_sec = sample_data.get("timestamp_ms", 0) / 1000.0
+                    metric_value = sample_data.get("value", 0.0)
+
+                    metric_obj = Metric(
+                        metric=labels, value=[timestamp_sec, metric_value]
+                    )
+                    metrics_for_anomaly_detection.append(metric_obj)
+
+                    labels_str = "-".join(
+                        sorted([f"{k}={v}" for k, v in labels.items()])
+                    )
+                    labels_hash = hashlib.sha256(labels_str.encode()).hexdigest()
+                    metric_identifier = (
+                        f"{timestamp_sec}-{metric_name}-{labels_hash}"
+                    )
+
+                    item = {
+                        "cluster_id": labels.get(
+                            "cluster_id", "unknown_cluster"
+                        ),
+                        "metric_identifier": metric_identifier,
+                        "timestamp": Decimal(str(timestamp_sec)),
+                        "metric_name": metric_name,
+                        "metric_labels": convert_floats_to_decimals(labels),
+                        "metric_value": convert_floats_to_decimals(
+                            [timestamp_sec, metric_value]
+                        ),
+                        "instance": labels.get("instance", "unknown"),
+                        "job": labels.get("job", "unknown"),
+                    }
+                    batch.put_item(Item=item)
+
+        logger.info(
+            (
+                f"Successfully processed and stored "
+                f"{len(metrics_for_anomaly_detection)} metric samples for cluster: {cluster_id}."
+            )
+        )
+
+        # --- Anomaly Detection and Alerting ---
+        # Anomaly detection is temporarily disabled due to Lambda size limits.
+        # anomalies = await detect_anomalies(
+        #     metrics_for_anomaly_detection, cluster_id
+        # )
+        # if anomalies:
+        #     alert_manager = AlertManager(alert_configs_table)
+        #     try:
+        #         response = alert_configs_table.get_item(
+        #             Key={"cluster_id": cluster_id}
+        #         )
+        #         config_item = response.get("Item")
+        #         if config_item and "telegram_chat_id" in config_item:
+        #             chat_id = str(config_item["telegram_chat_id"])
+        #             for anomaly in anomalies:
+        #                 alert_message = (
+        #                     f"🚨 Anomaly Alert for Cluster `{cluster_id}` 🚨\n\n{anomaly}"
+        #                 )
+        #                 await alert_manager.send_telegram_alert(
+        #                     chat_id, alert_message
+        #                 )
+        #         else:
+        #             logger.warning(
+        #                 (
+        #                     f"No Telegram chat ID for cluster {cluster_id}. "
+        #                     f"Logging alerts."
+        #                 )
+        #             )
+        #             for anomaly in anomalies:
+        #                 logger.warning(f"ALERT: {anomaly}")
+        #     except Exception as e:
+        #         logger.error(f"Failed to send Telegram alert: {e}")
