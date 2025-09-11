@@ -96,7 +96,7 @@ class AlertManager:
 
 
 # --- Main Lambda Handler ---
-async def handler(event, context):
+def handler(event, context):
     try:
         # --- Security Check ---
         headers = event.get("headers", {})
