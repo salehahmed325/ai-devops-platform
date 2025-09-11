@@ -68,7 +68,7 @@ jobs:
       TF_VAR_aws_account_id: ${{ secrets.AWS_ACCOUNT_ID }}
       TF_VAR_telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TF_VAR_api_key: ${{ secrets.API_KEY }}
-      
+      TF_VAR_lambda_zip_key: ${{ needs.build.outputs.lambda_zip_key }}
 
     steps:
     - name: Checkout code
