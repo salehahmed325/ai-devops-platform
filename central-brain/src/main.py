@@ -113,6 +113,7 @@ def handler(event, context):
                     )
                     metrics_for_anomaly_detection.append(metric_obj)
                     logger.info(f"Created metric_obj: {metric_obj}")
+                    logger.info(f"Current metric samples count: {len(metrics_for_anomaly_detection)}")
 
                     labels_str = "-".join(
                         sorted([f"{k}={v}" for k, v in labels.items()])
