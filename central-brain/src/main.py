@@ -112,6 +112,7 @@ def handler(event, context):
                         metric=labels, value=[timestamp_sec, metric_value]
                     )
                     metrics_for_anomaly_detection.append(metric_obj)
+                    logger.info(f"Created metric_obj: {metric_obj}")
 
                     labels_str = "-".join(
                         sorted([f"{k}={v}" for k, v in labels.items()])
@@ -135,6 +136,7 @@ def handler(event, context):
                         "instance": labels.get("instance", "unknown"),
                         "job": labels.get("job", "unknown"),
                     }
+                    logger.info(f"Putting item into batch: {item}")
                     batch.put_item(Item=item)
 
         logger.info(
