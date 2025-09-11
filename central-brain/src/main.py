@@ -113,7 +113,7 @@ def handler(event, context):
                     )
                     metrics_for_anomaly_detection.append(metric_obj)
                     logger.info(f"Created metric_obj: {metric_obj}")
-                    logger.info(f"Current metric samples count: {len(metrics_for_anomaly_detection)}")
+                    
 
                     labels_str = "-".join(
                         sorted([f"{k}={v}" for k, v in labels.items()])
@@ -143,7 +143,7 @@ def handler(event, context):
         logger.info(
             (
                 f"Successfully processed and stored "
-                f"{len(metrics_for_anomaly_detection)} metric samples for cluster: {cluster_id}."
+                f"{len(parsed_json_body.get('timeseries', []))} metric samples for cluster: {cluster_id}."
             )
         )
 
