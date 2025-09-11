@@ -110,7 +110,7 @@ def handler(event, context):
             return {"statusCode": 403, "body": "Forbidden: Invalid API Key"}
 
         # --- Request Body Processing ---
-        body = event.get("body", "")
+        body = event.get("body", "").encode('utf-8')
 
         if not body:
             logger.warning("Request body is empty.")
