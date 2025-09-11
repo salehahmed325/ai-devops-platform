@@ -18,41 +18,41 @@
 
 ### b. `central-brain`
 - **Purpose**: A serverless AWS Lambda function that serves as the AI/ML core.
-- **Function**: It exposes an API Gateway endpoint to receive Prometheus `remote_write` data. It stores data in DynamoDB and sends alerts via Telegram.
-- **Status**: **DEPLOYED (but anomaly detection temporarily disabled)**. The core ingestion and storage are functional. Anomaly detection is currently disabled due to AWS Lambda size limits for `numpy` and `scikit-learn`.
+- **Function**: It exposes an API Gateway endpoint to receive data, stores data in DynamoDB, and sends alerts via Telegram.
+- **Status**: **DEPLOYED & Receiving JSON Data**. The Lambda function is successfully receiving and parsing JSON data. Anomaly detection is temporarily disabled. **Current Issue**: Data is not being stored in DynamoDB, despite `batch.put_item` being called. The Lambda logs show "Successfully processed and stored 0 metric samples", which is misleading.
 
 ### c. Infrastructure (Terraform)
 - **Provider**: AWS
 - **State Management**: Terraform state is stored remotely in an S3 bucket.
-- **Status**: **UPDATED FOR SERVERLESS**. The infrastructure now provisions API Gateway, Lambda, and necessary IAM roles.
+- **Status**: **UPDATED FOR SERVERLESS & VPC REMOVED**. The infrastructure now provisions API Gateway, Lambda, and necessary IAM roles. VPC configuration has been removed.
 
 ### d. CI/CD
-- **Workflows**: Unified `central-brain.yaml` workflow for building and deploying the `central-brain` Lambda function and its associated layer.
-- **Status**: **IN PROGRESS / DEBUGGING**. The pipeline is currently failing during the Lambda Layer publication step due to an empty zip file.
+- **Workflows**: Unified `central-brain.yaml` workflow for building and deploying the `central-brain` Lambda function.
+- **Status**: **FUNCTIONAL**. The pipeline is successfully deploying the Lambda function.
 
 ## 3. How to Resume
 
 When you start our new session, paste the entire content of this file as your first message. Then, we can proceed with the following next steps.
 
-## 4. Session Summary (2025-09-10)
+## 4. Session Summary (2025-09-11)
 
-Today, we undertook a major architectural pivot and debugged numerous CI/CD issues:
+Today, we debugged numerous issues with the `central-brain` Lambda function:
 
-1.  **Architectural Pivot**: Transitioned the `central-brain` from an ECS-based container to a cost-effective, serverless AWS Lambda function exposed via API Gateway.
-2.  **Code Refactoring**: Rewrote `central-brain/src/main.py` to be a Lambda handler, including Prometheus `remote_write` parsing.
-3.  **Infrastructure Refactoring**: Updated Terraform to provision Lambda, API Gateway, and associated IAM roles, removing old ECS/ALB resources.
-4.  **CI/CD Refactoring**: Unified the `central-brain` build and deploy workflows into a single `central-brain.yaml` file, removing the separate `terraform.yaml`.
-5.  **Debugging CI/CD and Code Issues**:
-    *   Resolved `pip install zip` error (incorrect dependency).
-    *   Fixed `black` formatting and `flake8` linting errors (syntax, unused imports, line length conflicts).
-    *   Addressed local Pylance type-checking warnings (`boto3` stubs, protobuf type hints).
-    *   Resolved `NoSuchBucket` error (timing issue between S3 upload and Terraform apply).
-    *   Encountered `RequestEntityTooLargeException` for Lambda Layer (zipped size limit).
-    *   Encountered `InvalidParameterValueException: Unzipped size must be smaller than 262144000 bytes` for Lambda Layer (unzipped size limit).
-    *   **Current Issue**: The `layer_build` job is now creating an empty zip file, leading to `Uploaded file must be a non-empty zip` error. Anomaly detection is temporarily disabled.
+1.  **Lambda Layer & VPC Removal**: Removed the `layer_build` job and VPC configuration from the CI/CD and Terraform, resolving deployment errors related to empty zip files and manual VPC deletions.
+2.  **Lambda Handler Fixes**:
+    *   Changed `async def handler` to `def handler` to resolve `Runtime.MarshalError`.
+    *   Fixed `lambda_zip_key` not being passed to the deploy job in CI/CD.
+    *   Resolved `NameError: name 'logger' is not defined` by moving logger initialization.
+    *   Fixed `Syntax error: keyword argument repeated: create_key` by removing `create_key` arguments from hardcoded protobuf definition.
+    *   Fixed `Runtime.HandlerNotFound` by re-inserting the `handler` function.
+3.  **API Key Debugging**: Resolved "Invalid or missing API Key" by simplifying the API key and ensuring it was correctly passed and recognized by the Lambda.
+4.  **Data Ingestion Pivot (Protobuf to JSON)**:
+    *   Encountered persistent `snappy` decompression issues (`cramjam.DecompressionError: snappy: corrupt input`) and `protobuf` parsing errors (`Error parsing message with type 'remote.WriteRequest'`).
+    *   Decided to pivot to JSON data ingestion to bypass these issues, modifying both `central-brain/src/main.py` and `generate_payload.py` to handle JSON.
+    *   Successfully verified JSON data reception and parsing in Lambda.
 
 ## 5. Next Steps
 
-*   **Immediate Fix**: Resolve the `Uploaded file must be a non-empty zip` error in the `layer_build` job.
+*   **Immediate Fix**: Debug why data is not being stored in DynamoDB by the `central-brain` Lambda function. This will involve further investigation into the `batch_writer` and `put_item` operations, and potentially checking DynamoDB permissions or table configuration.
 *   **Anomaly Detection**: Re-evaluate how to implement anomaly detection given Lambda size constraints (e.g., separate service, different ML approach).
 *   **Documentation**: Update other project documentation (`README.md`, `INSTALL.md`) to reflect the new architecture.
