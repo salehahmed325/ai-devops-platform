@@ -111,8 +111,7 @@ def handler(event, context):
 
         # --- Request Body Processing ---
         body = event.get("body", "")
-        if event.get("isBase64Encoded", False):
-            body = base64.b64decode(body)
+        body = base64.b64decode(body)
 
         if not body:
             logger.warning("Request body is empty.")
