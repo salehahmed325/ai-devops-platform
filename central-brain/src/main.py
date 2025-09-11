@@ -25,6 +25,7 @@ from mypy_boto3_dynamodb.service_resource import (
 # --- Configuration ---
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 API_KEY = os.getenv("API_KEY", "dev-test-key-123")
+logger.info(f"Lambda API Key: {API_KEY}")
 DYNAMODB_TABLE_NAME = os.getenv("DYNAMODB_TABLE_NAME", "ai-devops-platform-data")
 DYNAMODB_LOGS_TABLE_NAME = os.getenv(
     "DYNAMODB_LOGS_TABLE_NAME", "ai-devops-platform-logs"
