@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 import boto3
 import httpx
-import snappy
+
 
 # Import the generated protobuf file
 from prompb import remote_pb2
