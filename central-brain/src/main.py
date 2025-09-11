@@ -102,7 +102,9 @@ def handler(event, context):
     try:
         # --- Security Check ---
         headers = event.get("headers", {})
+        logger.info(f"Received headers: {headers}")
         api_key_received = headers.get("x-api-key")
+        logger.info(f"API Key received from headers: {api_key_received}")
         if api_key_received != API_KEY:
             logger.warning("Invalid or missing API Key.")
             return {"statusCode": 403, "body": "Forbidden: Invalid API Key"}
