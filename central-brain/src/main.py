@@ -7,6 +7,7 @@ from typing import Any, Dict, List
 from dataclasses import dataclass
 import json
 import statistics
+import uuid
 
 import boto3
 import httpx
@@ -16,6 +17,9 @@ import gzip
 # OTLP Protobuf imports
 from opentelemetry.proto.collector.metrics.v1.metrics_service_pb2 import (
     ExportMetricsServiceRequest,
+)
+from opentelemetry.proto.collector.logs.v1.logs_service_pb2 import (
+    ExportLogsServiceRequest,
 )
 
 # Import types for boto3 for better static analysis
@@ -184,91 +188,138 @@ def handler(event, context):
         if headers.get("content-encoding") == "gzip":
             body = gzip.decompress(body)
 
-        metrics_request = ExportMetricsServiceRequest()
-        metrics_request.ParseFromString(body)
-        
-        logger.info(f"Successfully parsed OTLP Protobuf message.")
+        # Try parsing as Metrics
+        try:
+            metrics_request = ExportMetricsServiceRequest()
+            metrics_request.ParseFromString(body)
+            logger.info(f"Successfully parsed OTLP Protobuf metrics message.")
 
-        # --- OTLP Data Transformation and Storage ---
-        metrics_for_anomaly_detection: List[Metric] = []
-        cluster_id = "unknown_cluster"
+            # --- OTLP Metrics Transformation and Storage ---
+            metrics_for_anomaly_detection: List[Metric] = []
+            cluster_id = "unknown_cluster"
 
-        with table.batch_writer() as batch:
-            for resource_metric in metrics_request.resource_metrics:
-                for scope_metric in resource_metric.scope_metrics:
-                    for metric in scope_metric.metrics:
-                        metric_name = metric.name
-                        metric_type = metric.WhichOneof("data")
+            with table.batch_writer() as batch:
+                for resource_metric in metrics_request.resource_metrics:
+                    for scope_metric in resource_metric.scope_metrics:
+                        for metric in scope_metric.metrics:
+                            metric_name = metric.name
+                            metric_type = metric.WhichOneof("data")
 
-                        # Skip complex metric types we don't handle yet
-                        if metric_type not in ["gauge", "sum"]:
-                            continue
-                        
-                        if not metric_type:
-                            continue
-                        
-                        data = getattr(metric, metric_type)
-
-                        for data_point in data.data_points:
-                            # Extract labels from attributes
-                            labels = {attr.key: attr.value.string_value for attr in data_point.attributes}
-                            labels["__name__"] = metric_name
-
-                            if "cluster_id" in labels:
-                                cluster_id = labels["cluster_id"]
-                            
-                            # Extract timestamp and value
-                            timestamp_ns = data_point.time_unix_nano
-                            timestamp_sec = timestamp_ns / 1e9
-                            
-                            value_key = data_point.WhichOneof("value")
-                            if not value_key:
+                            # Skip complex metric types we don't handle yet
+                            if metric_type not in ["gauge", "sum"]:
                                 continue
-                            metric_value = getattr(data_point, value_key)
+                            
+                            if not metric_type:
+                                continue
+                            
+                            data = getattr(metric, metric_type)
 
-                            # Create metric object for anomaly detection
-                            metric_obj = Metric(
-                                metric=labels, value=[timestamp_sec, metric_value]
-                            )
-                            metrics_for_anomaly_detection.append(metric_obj)
+                            for data_point in data.data_points:
+                                # Extract labels from attributes
+                                labels = {attr.key: attr.value.string_value for attr in data_point.attributes}
+                                labels["__name__"] = metric_name
 
-                            # Create DynamoDB item
-                            labels_str = "-".join(
-                                sorted([f"{k}={v}" for k, v in labels.items()])
-                            )
-                            labels_hash = hashlib.sha256(labels_str.encode()).hexdigest()
-                            metric_identifier = (
-                                f"{timestamp_sec}-{metric_name}-{labels_hash}"
-                            )
+                                if "cluster_id" in labels:
+                                    cluster_id = labels["cluster_id"]
+                                
+                                # Extract timestamp and value
+                                timestamp_ns = data_point.time_unix_nano
+                                timestamp_sec = timestamp_ns / 1e9
+                                
+                                value_key = data_point.WhichOneof("value")
+                                if not value_key:
+                                    continue
+                                metric_value = getattr(data_point, value_key)
 
-                            item = {
-                                "cluster_id": labels.get(
-                                    "cluster_id", "unknown_cluster"
-                                ),
-                                "metric_identifier": metric_identifier,
-                                "timestamp": Decimal(str(timestamp_sec)),
-                                "metric_name": metric_name,
-                                "metric_labels": convert_floats_to_decimals(labels),
-                                "metric_value": convert_floats_to_decimals(
-                                    [timestamp_sec, metric_value]
-                                ),
-                                "instance": labels.get("instance", "unknown"),
-                                "job": labels.get("job", "unknown"),
-                            }
-                            batch.put_item(Item=item)
+                                # Create metric object for anomaly detection
+                                metric_obj = Metric(
+                                    metric=labels, value=[timestamp_sec, metric_value]
+                                )
+                                metrics_for_anomaly_detection.append(metric_obj)
 
-        logger.info(
-            (
-                f"Successfully processed and stored "
-                f"{len(metrics_for_anomaly_detection)} metric samples for cluster: {cluster_id}."
+                                # Create DynamoDB item
+                                labels_str = "-".join(
+                                    sorted([f"{k}={v}" for k, v in labels.items()])
+                                )
+                                labels_hash = hashlib.sha256(labels_str.encode()).hexdigest()
+                                metric_identifier = (
+                                    f"{timestamp_sec}-{metric_name}-{labels_hash}"
+                                )
+
+                                item = {
+                                    "cluster_id": labels.get(
+                                        "cluster_id", "unknown_cluster"
+                                    ),
+                                    "metric_identifier": metric_identifier,
+                                    "timestamp": Decimal(str(timestamp_sec)),
+                                    "metric_name": metric_name,
+                                    "metric_labels": convert_floats_to_decimals(labels),
+                                    "metric_value": convert_floats_to_decimals(
+                                        [timestamp_sec, metric_value]
+                                    ),
+                                    "instance": labels.get("instance", "unknown"),
+                                    "job": labels.get("job", "unknown"),
+                                }
+                                batch.put_item(Item=item)
+
+            logger.info(
+                (
+                    f"Successfully processed and stored "
+                    f"{len(metrics_for_anomaly_detection)} metric samples for cluster: {cluster_id}."
+                )
             )
-        )
 
-        # --- Anomaly Detection and Alerting ---
-        if metrics_for_anomaly_detection:
-            anomalies = detect_anomalies(metrics_for_anomaly_detection)
-            if anomalies:
-                send_telegram_alert(anomalies)
+            # --- Anomaly Detection and Alerting ---
+            if metrics_for_anomaly_detection:
+                anomalies = detect_anomalies(metrics_for_anomaly_detection)
+                if anomalies:
+                    send_telegram_alert(anomalies)
+
+        except Exception as e:
+            # Try parsing as Logs if Metrics parsing failed
+            try:
+                logs_request = ExportLogsServiceRequest()
+                logs_request.ParseFromString(body)
+                logger.info(f"Successfully parsed OTLP Protobuf logs message.")
+
+                # --- OTLP Logs Transformation and Storage ---
+                log_samples_processed = 0
+                with logs_table.batch_writer() as batch:
+                    for resource_log in logs_request.resource_logs:
+                        for scope_log in resource_log.scope_logs:
+                            for log_record in scope_log.log_records:
+                                timestamp_ns = log_record.time_unix_nano
+                                timestamp_sec = timestamp_ns / 1e9
+                                
+                                log_body = log_record.body.string_value
+                                severity_text = log_record.severity_text
+
+                                # Extract attributes (labels) from log record
+                                attributes = {attr.key: attr.value.string_value for attr in log_record.attributes}
+
+                                # Create a unique ID for the log entry
+                                log_id = str(uuid.uuid4())
+
+                                item = {
+                                    "log_id": log_id,
+                                    "timestamp": Decimal(str(timestamp_sec)),
+                                    "body": log_body,
+                                    "severity_text": severity_text,
+                                    "attributes": convert_floats_to_decimals(attributes),
+                                }
+                                batch.put_item(Item=item)
+                                log_samples_processed += 1
+
+                logger.info(
+                    (
+                        f"Successfully processed and stored "
+                        f"{log_samples_processed} log samples."
+                    )
+                )
+
+            except Exception as log_e:
+                logger.error(f"Failed to parse as Metrics or Logs: {e}, {log_e}", exc_info=True)
+                return {"statusCode": 400, "body": "Bad Request: Invalid OTLP Payload"}
 
         return {"statusCode": 200, "body": "{}"}
 
