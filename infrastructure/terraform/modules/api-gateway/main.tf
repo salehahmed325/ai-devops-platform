@@ -11,7 +11,7 @@ resource "aws_apigatewayv2_integration" "this" {
   integration_type = "AWS_PROXY"
   integration_uri  = var.lambda_invoke_arn
   payload_format_version = "2.0" # This is important for the event structure sent to Lambda
-}
+  content_handling_strategy = "CONVERT_TO_TEXT" # Convert binary payloads to base64 text
 
 # Create the default route that sends all traffic to the Lambda integration
 resource "aws_apigatewayv2_route" "default" {
