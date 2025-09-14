@@ -8,7 +8,7 @@ receivers:
             - targets: ['192.168.101.17:9090']
   filelog:
     include:
-      - /var/log/app.log
+      - /var/log/syslog
 
 exporters:
   otlphttp:
