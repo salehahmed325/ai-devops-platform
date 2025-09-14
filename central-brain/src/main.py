@@ -173,54 +173,72 @@ def handler(event, context):
 
         try:
             parsed_json_body = json.loads(body)
+            logger.info(f"Received OTLP JSON body: {json.dumps(parsed_json_body, indent=2)}")
         except json.JSONDecodeError as e:
             logger.error(f"Error decoding JSON body: {e}")
             return {"statusCode": 400, "body": "Bad Request: Invalid JSON body"}
 
-        # --- Data Transformation and Storage ---
+        # --- OTLP Data Transformation and Storage ---
         metrics_for_anomaly_detection: List[Metric] = []
         cluster_id = "unknown_cluster"
 
         with table.batch_writer() as batch:
-            for ts_data in parsed_json_body.get("timeseries", []):
-                labels = ts_data.get("labels", {})
-                metric_name = labels.get("__name__", "")
+            for resource_metric in parsed_json_body.get("resourceMetrics", []):
+                for scope_metric in resource_metric.get("scopeMetrics", []):
+                    for metric in scope_metric.get("metrics", []):
+                        metric_name = metric.get("name")
+                        # The data points are nested under the metric type (e.g., 'gauge', 'sum')
+                        metric_type = next(iter(metric.keys() - {'name'}), None)
+                        if not metric_type:
+                            continue
 
-                if "cluster_id" in labels:
-                    cluster_id = labels["cluster_id"]
+                        for data_point in metric.get(metric_type, {}).get("dataPoints", []):
+                            # Extract labels from attributes
+                            labels = {attr['key']: attr['value']['stringValue'] for attr in data_point.get("attributes", [])}
+                            labels["__name__"] = metric_name
 
-                for sample_data in ts_data.get("samples", []):
-                    timestamp_sec = sample_data.get("timestamp_ms", 0) / 1000.0
-                    metric_value = sample_data.get("value", 0.0)
+                            if "cluster_id" in labels:
+                                cluster_id = labels["cluster_id"]
+                            
+                            # Extract timestamp and value
+                            timestamp_ns = int(data_point.get("timeUnixNano", 0))
+                            timestamp_sec = timestamp_ns / 1e9
+                            
+                            value_key = next(iter(data_point.keys() - {'attributes', 'timeUnixNano', 'startTimeUnixNano'}), None)
+                            if not value_key:
+                                continue
+                            metric_value = data_point.get(value_key)
 
-                    metric_obj = Metric(
-                        metric=labels, value=[timestamp_sec, metric_value]
-                    )
-                    metrics_for_anomaly_detection.append(metric_obj)
-                    
-                    labels_str = "-".join(
-                        sorted([f"{k}={v}" for k, v in labels.items()])
-                    )
-                    labels_hash = hashlib.sha256(labels_str.encode()).hexdigest()
-                    metric_identifier = (
-                        f"{timestamp_sec}-{metric_name}-{labels_hash}"
-                    )
+                            # Create metric object for anomaly detection
+                            metric_obj = Metric(
+                                metric=labels, value=[timestamp_sec, metric_value]
+                            )
+                            metrics_for_anomaly_detection.append(metric_obj)
 
-                    item = {
-                        "cluster_id": labels.get(
-                            "cluster_id", "unknown_cluster"
-                        ),
-                        "metric_identifier": metric_identifier,
-                        "timestamp": Decimal(str(timestamp_sec)),
-                        "metric_name": metric_name,
-                        "metric_labels": convert_floats_to_decimals(labels),
-                        "metric_value": convert_floats_to_decimals(
-                            [timestamp_sec, metric_value]
-                        ),
-                        "instance": labels.get("instance", "unknown"),
-                        "job": labels.get("job", "unknown"),
-                    }
-                    batch.put_item(Item=item)
+                            # Create DynamoDB item
+                            labels_str = "-".join(
+                                sorted([f"{k}={v}" for k, v in labels.items()])
+                            )
+                            labels_hash = hashlib.sha256(labels_str.encode()).hexdigest()
+                            metric_identifier = (
+                                f"{timestamp_sec}-{metric_name}-{labels_hash}"
+                            )
+
+                            item = {
+                                "cluster_id": labels.get(
+                                    "cluster_id", "unknown_cluster"
+                                ),
+                                "metric_identifier": metric_identifier,
+                                "timestamp": Decimal(str(timestamp_sec)),
+                                "metric_name": metric_name,
+                                "metric_labels": convert_floats_to_decimals(labels),
+                                "metric_value": convert_floats_to_decimals(
+                                    [timestamp_sec, metric_value]
+                                ),
+                                "instance": labels.get("instance", "unknown"),
+                                "job": labels.get("job", "unknown"),
+                            }
+                            batch.put_item(Item=item)
 
         logger.info(
             (
