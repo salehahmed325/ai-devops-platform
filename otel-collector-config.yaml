@@ -18,15 +18,16 @@ exporters:
 
 processors:
   batch: {}
-  transform:
-    metric_statements:
-      - context: metric
-        statements:
-          - "keep_metrics(metric.type_str == \"Gauge\" or metric.type_str == \"Sum\")"
+  filter:
+    metrics:
+      exclude:
+        match_type: regexp
+        metric_names:
+          - ".*_total$"
 
 service:
   pipelines:
     metrics:
       receivers: [prometheus]
-      processors: [batch, transform]
+      processors: [batch, filter]
       exporters: [otlphttp, debug]
