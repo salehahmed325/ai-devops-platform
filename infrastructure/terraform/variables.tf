@@ -34,6 +34,12 @@ variable "telegram_bot_token" {
   default     = "" # Provide a default empty string
 }
 
+variable "telegram_chat_id" {
+  description = "Telegram chat ID for sending alerts"
+  type        = string
+  default     = "" # Provide a default empty string
+}
+
 variable "api_key" {
   description = "The API key for securing the central-brain endpoint"
   type        = string

@@ -93,6 +93,7 @@ module "lambda_central_brain" {
   lambda_environment_variables = {
     API_KEY                           = var.api_key
     TELEGRAM_BOT_TOKEN                = var.telegram_bot_token
+    TELEGRAM_CHAT_ID                  = var.telegram_chat_id
     DYNAMODB_TABLE_NAME               = module.dynamodb_data.table_name
     DYNAMODB_LOGS_TABLE_NAME          = module.dynamodb_data.logs_table_name
     DYNAMODB_ALERT_CONFIGS_TABLE_NAME = aws_dynamodb_table.alert_configs.name

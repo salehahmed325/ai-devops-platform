@@ -1,1 +1,0 @@
-{"metric": {"__name__": "test_metric", "instance": "test_instance", "job": "test_job", "cluster_id": "test_cluster"}, "value": [1678886400.0, 1.0]}

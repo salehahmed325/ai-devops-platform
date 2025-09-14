@@ -94,3 +94,8 @@ kubeconfig_*
 # Temporary files
 tmp/
 temp/
+
+# Local payload and script files
+remote_pb2.py
+generate_payload.py
+payload.json

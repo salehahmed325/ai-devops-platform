@@ -6,6 +6,7 @@ from decimal import Decimal
 from typing import Any, Dict, List
 from dataclasses import dataclass
 import json
+import statistics
 
 import boto3
 import httpx
@@ -21,6 +22,7 @@ from mypy_boto3_dynamodb.service_resource import (
 # --- Configuration ---
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 API_KEY = os.getenv("API_KEY", "dev-test-key-123")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 DYNAMODB_TABLE_NAME = os.getenv("DYNAMODB_TABLE_NAME", "ai-devops-platform-data")
 DYNAMODB_LOGS_TABLE_NAME = os.getenv(
@@ -54,6 +56,15 @@ class Metric:
     metric: Dict[str, str]
     value: List[Any]
 
+@dataclass
+class Anomaly:
+    metric_name: str
+    instance: str
+    job: str
+    value: float
+    timestamp: float
+    reason: str
+
 
 # --- Helper Functions ---
 def convert_floats_to_decimals(obj):
@@ -65,29 +76,97 @@ def convert_floats_to_decimals(obj):
         return [convert_floats_to_decimals(elem) for elem in obj]
     return obj
 
+def detect_anomalies_by_std_dev(
+    metrics: List[Metric], std_dev_threshold: int = 3
+) -> List[Anomaly]:
+    anomalies: List[Anomaly] = []
+    
+    # Group metrics by their name
+    metrics_by_name: Dict[str, List[Metric]] = {}
+    for m in metrics:
+        metric_name = m.metric.get("__name__", "unknown")
+        if metric_name not in metrics_by_name:
+            metrics_by_name[metric_name] = []
+        metrics_by_name[metric_name].append(m)
+
+    # Calculate anomalies for each group
+    for metric_name, metric_group in metrics_by_name.items():
+        values = [m.value[1] for m in metric_group]
+        
+        if len(values) < 2:
+            continue # Not enough data to calculate std dev
+
+        mean = statistics.mean(values)
+        std_dev = statistics.stdev(values)
+        
+        lower_bound = mean - (std_dev * std_dev_threshold)
+        upper_bound = mean + (std_dev * std_dev_threshold)
+
+        for m in metric_group:
+            val = m.value[1]
+            if val < lower_bound or val > upper_bound:
+                anomaly = Anomaly(
+                    metric_name=metric_name,
+                    instance=m.metric.get("instance", "unknown"),
+                    job=m.metric.get("job", "unknown"),
+                    value=val,
+                    timestamp=m.value[0],
+                    reason=f"Value {val:.2f} is outside the {std_dev_threshold}-sigma range ({lower_bound:.2f} - {upper_bound:.2f})",
+                )
+                anomalies.append(anomaly)
+                logger.warning(f"Anomaly Detected: {anomaly}")
+
+    return anomalies
+
+def send_telegram_alert(anomalies: List[Anomaly]):
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        logger.warning("Telegram bot token or chat ID is not configured. Skipping alert.")
+        return
+
+    message = "🚨 *Anomaly Alert* 🚨\n\n"
+    for anomaly in anomalies:
+        message += (
+            f"Metric: `{anomaly.metric_name}`\n"
+            f"Instance: `{anomaly.instance}`\n"
+            f"Value: `{anomaly.value:.2f}`\n"
+            f"Reason: _{anomaly.reason}_\n\n"
+        )
+    
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": message,
+        "parse_mode": "Markdown"
+    }
+    
+    try:
+        with httpx.Client() as client:
+            response = client.post(TELEGRAM_API_URL, json=payload)
+            response.raise_for_status()
+            logger.info("Successfully sent Telegram alert.")
+    except httpx.RequestError as e:
+        logger.error(f"Error sending Telegram alert: {e}")
+    except Exception as e:
+        logger.error(f"An unexpected error occurred while sending Telegram alert: {e}")
+
 
 # --- Main Lambda Handler ---
 def handler(event, context):
     try:
         # --- Security Check ---
         headers = event.get("headers", {})
-        logger.info(f"Received headers: {headers}")
         api_key_received = headers.get("x-api-key")
-        logger.info(f"API Key received from headers: {api_key_received}")
         if api_key_received != API_KEY:
             logger.warning("Invalid or missing API Key.")
             return {"statusCode": 403, "body": "Forbidden: Invalid API Key"}
 
         # --- Request Body Processing ---
         body = event.get("body", "")
-        
         if not body:
             logger.warning("Request body is empty.")
             return {"statusCode": 400, "body": "Bad Request: Empty body"}
 
         try:
             parsed_json_body = json.loads(body)
-            logger.info(f"Received JSON body: {parsed_json_body}")
         except json.JSONDecodeError as e:
             logger.error(f"Error decoding JSON body: {e}")
             return {"statusCode": 400, "body": "Bad Request: Invalid JSON body"}
@@ -112,9 +191,7 @@ def handler(event, context):
                         metric=labels, value=[timestamp_sec, metric_value]
                     )
                     metrics_for_anomaly_detection.append(metric_obj)
-                    logger.info(f"Created metric_obj: {metric_obj}")
                     
-
                     labels_str = "-".join(
                         sorted([f"{k}={v}" for k, v in labels.items()])
                     )
@@ -137,21 +214,23 @@ def handler(event, context):
                         "instance": labels.get("instance", "unknown"),
                         "job": labels.get("job", "unknown"),
                     }
-                    logger.info(f"Putting item into batch: {item}")
                     batch.put_item(Item=item)
 
         logger.info(
             (
                 f"Successfully processed and stored "
-                f"{len(parsed_json_body.get('timeseries', []))} metric samples for cluster: {cluster_id}."
+                f"{len(metrics_for_anomaly_detection)} metric samples for cluster: {cluster_id}."
             )
         )
 
+        # --- Anomaly Detection and Alerting ---
+        if metrics_for_anomaly_detection:
+            anomalies = detect_anomalies_by_std_dev(metrics_for_anomaly_detection)
+            if anomalies:
+                send_telegram_alert(anomalies)
+
         return {"statusCode": 200, "body": "Success"}
 
-    
     except Exception as e:
         logger.error(f"An unexpected error occurred: {e}", exc_info=True)
         return {"statusCode": 500, "body": "Internal Server Error"}
-
-# Small change to trigger CI/CD pipeline.

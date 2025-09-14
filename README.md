@@ -6,18 +6,17 @@ A cloud-native, AI-powered monitoring platform designed to help DevOps teams pro
 
 This platform consists of two main components:
 
-*   **`central-brain`**: A cloud-hosted service (running on AWS ECS) that ingests metrics, performs anomaly detection, and sends alerts.
-*   **`edge-agent`**: A lightweight, containerized agent that is deployed to your infrastructure to collect and forward Prometheus metrics.
+*   **`central-brain`**: A serverless AWS Lambda function that serves as the AI/ML core. It ingests data via an API Gateway endpoint, stores it in DynamoDB, and sends alerts.
+*   **`edge-agent`**: A lightweight, containerized agent that is deployed to your infrastructure to collect and forward Prometheus metrics. (Note: Its direct role is being de-emphasized in favor of more standard data ingestion methods).
 
 The entire infrastructure is managed via Terraform, and CI/CD pipelines are set up using GitHub Actions to automatically build and deploy the components.
 
 ## Architecture
 
-*   **Data Collection**: The `edge-agent` scrapes a local Prometheus instance for all available metrics.
-*   **Data Ingestion**: The agent sends the collected metrics to the `central-brain`'s secure `/ingest` endpoint.
-*   **Processing & Storage**: The `central-brain` processes the incoming data, runs anomaly detection algorithms (currently on the `up` metric), and stores the data in a DynamoDB table.
-*   **Alerting**: If an anomaly is detected, the `central-brain` sends an alert via Telegram.
-*   **Infrastructure**: All backend components (ECS, DynamoDB, S3, ALB, etc.) are provisioned on AWS using Terraform.
+*   **Data Ingestion**: A secure API Gateway endpoint receives monitoring data (e.g., metrics, events) in JSON format.
+*   **Processing & Storage**: The `central-brain` Lambda function processes the incoming JSON data, transforms it, and stores the resulting metric samples in a DynamoDB table for persistence and future analysis.
+*   **Alerting**: If an anomaly is detected (functionality temporarily disabled), the `central-brain` sends an alert via Telegram.
+*   **Infrastructure**: All backend components (API Gateway, Lambda, DynamoDB, S3, IAM) are provisioned on AWS using Terraform.
 
 ## Getting Started
 
@@ -42,11 +41,10 @@ The core infrastructure is managed by Terraform.
     cd infrastructure/terraform
     terraform apply
     ```
-    You will be prompted to enter your Telegram Bot Token and Chat ID.
 
 ### 2. Component Deployment
 
-*   **`central-brain`**: This component is automatically built and deployed by the GitHub Actions workflow (`.github/workflows/central-brain.yaml`) whenever changes are pushed to the `main` branch. The Terraform deployment creates the necessary ECS service to run it.
+*   **`central-brain`**: This component is automatically built and deployed by the GitHub Actions workflow (`.github/workflows/central-brain.yaml`) whenever changes are pushed to the `main` branch. The workflow packages the Python code and deploys it to the AWS Lambda function created by Terraform.
 
 *   **`edge-agent`**: The agent is designed to be run as a Docker container on the server you want to monitor. See the [Edge Agent README](edge-agent/README.md) for detailed deployment instructions.
 
