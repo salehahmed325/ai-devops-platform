@@ -11,6 +11,8 @@ import statistics
 import boto3
 import httpx
 
+import gzip
+
 # OTLP Protobuf imports
 from opentelemetry.proto.collector.metrics.v1.metrics_service_pb2 import (
     ExportMetricsServiceRequest,
@@ -177,6 +179,10 @@ def handler(event, context):
 
         if event.get("isBase64Encoded", False):
             body = base64.b64decode(body)
+
+        # Handle gzipped content
+        if headers.get("content-encoding") == "gzip":
+            body = gzip.decompress(body)
 
         metrics_request = ExportMetricsServiceRequest()
         metrics_request.ParseFromString(body)
