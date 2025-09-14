@@ -18,15 +18,14 @@ exporters:
 
 processors:
   batch: {}
-  filter:
-    metrics:
-      include:
-        match_type: strict
-        metric_type: gauge
+  transform:
+    metric_statements:
+      - context: metric
+        drop: "metric.type != METRIC_DATA_TYPE_GAUGE and metric.type != METRIC_DATA_TYPE_SUM"
 
 service:
   pipelines:
     metrics:
       receivers: [prometheus]
-      processors: [batch, filter]
+      processors: [batch, transform]
       exporters: [otlphttp, debug]
