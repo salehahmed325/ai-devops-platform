@@ -144,7 +144,8 @@ def send_telegram_alert(anomalies: List[Anomaly]):
     }
     
     try:
-        with httpx.Client() as client:
+        # Set a longer timeout to handle potential Lambda cold starts
+        with httpx.Client(timeout=15.0) as client:
             response = client.post(TELEGRAM_API_URL, json=payload)
             response.raise_for_status()
             logger.info("Successfully sent Telegram alert.")
