@@ -100,14 +100,3 @@ module "lambda_central_brain" {
   }
 }
 
-# --- API Gateway for Central Brain Lambda ---
-module "api_gateway_central_brain" {
-  source = "./modules/api-gateway"
-
-  project_name = var.project_name
-  environment  = var.environment
-  tags         = local.common_tags
-
-  lambda_invoke_arn = module.lambda_central_brain.function_invoke_arn
-  function_name     = module.lambda_central_brain.function_name
-}

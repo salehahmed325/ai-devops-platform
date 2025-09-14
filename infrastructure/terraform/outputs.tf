@@ -1,5 +1,4 @@
-output "central_brain_api_endpoint" {
-  description = "The invoke URL for the Central Brain API Gateway"
-  value       = module.api_gateway_central_brain.api_endpoint
+output "lambda_function_url" {
+  description = "The URL of the Central Brain Lambda function"
+  value       = module.lambda_central_brain.function_url
 }
-

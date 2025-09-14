@@ -19,3 +19,15 @@ resource "aws_lambda_function" "this" {
   # Attach Lambda Layer if provided
   layers = var.lambda_layer_arn == null ? [] : [var.lambda_layer_arn]
 }
+
+resource "aws_lambda_function_url" "this" {
+  function_name      = aws_lambda_function.this.function_name
+  authorization_type = "NONE"
+
+  cors {
+    allow_credentials = true
+    allow_origins     = ["*"]
+    allow_methods     = ["*"]
+    allow_headers     = ["*"]
+  }
+}
