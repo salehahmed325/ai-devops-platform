@@ -6,17 +6,19 @@ A cloud-native, AI-powered monitoring platform designed to help DevOps teams pro
 
 This platform consists of two main components:
 
-*   **`central-brain`**: A serverless AWS Lambda function that serves as the AI/ML core. It ingests data via an API Gateway endpoint, stores it in DynamoDB, and sends alerts.
-*   **`edge-agent`**: A lightweight, containerized agent that is deployed to your infrastructure to collect and forward Prometheus metrics. (Note: Its direct role is being de-emphasized in favor of more standard data ingestion methods).
+*   **`central-brain`**: A serverless AWS Lambda function that serves as the AI/ML core. It ingests OTLP data, stores it in DynamoDB, performs anomaly detection, and sends alerts.
+*   **OpenTelemetry Collector**: A standard, vendor-neutral agent used for collecting metrics and logs from your infrastructure and forwarding them to the `central-brain`.
 
 The entire infrastructure is managed via Terraform, and CI/CD pipelines are set up using GitHub Actions to automatically build and deploy the components.
 
 ## Architecture
 
-*   **Data Ingestion**: A secure API Gateway endpoint receives monitoring data (e.g., metrics, events) in JSON format.
-*   **Processing & Storage**: The `central-brain` Lambda function processes the incoming JSON data, transforms it, and stores the resulting metric samples in a DynamoDB table for persistence and future analysis.
-*   **Alerting**: If an anomaly is detected (functionality temporarily disabled), the `central-brain` sends an alert via Telegram.
-*   **Infrastructure**: All backend components (API Gateway, Lambda, DynamoDB, S3, IAM) are provisioned on AWS using Terraform.
+*   **Data Collection**: The OpenTelemetry Collector scrapes Prometheus for metrics and reads logs from specified files.
+*   **Data Ingestion**: The collector sends the collected data (metrics and logs) in OTLP Protobuf format to the `central-brain`'s direct Lambda Function URL endpoint.
+*   **Processing & Storage**: The `central-brain` Lambda function receives the gzipped Protobuf payload, decompresses and parses it, then processes the incoming data. Metrics are stored in a DynamoDB table (`ai-devops-platform-data`), and logs are stored in a separate DynamoDB table (`ai-devops-platform-logs`).
+*   **Anomaly Detection**: The `central-brain` performs anomaly detection on ingested metrics using the Median Absolute Deviation (MAD) algorithm.
+*   **Alerting**: If an anomaly is detected, the `central-brain` sends an alert via Telegram.
+*   **Infrastructure**: All backend components (Lambda, DynamoDB, S3, IAM, Lambda Function URL) are provisioned on AWS using Terraform.
 
 ## Getting Started
 
@@ -24,7 +26,7 @@ The entire infrastructure is managed via Terraform, and CI/CD pipelines are set 
 
 *   An AWS Account
 *   Terraform installed
-*   Docker installed
+*   Docker installed (to run OpenTelemetry Collector)
 *   A Telegram Bot Token and Chat ID for alerts
 
 ### 1. Infrastructure Deployment
@@ -36,27 +38,40 @@ The core infrastructure is managed by Terraform.
     ```bash
     ./scripts/terraform-init.sh
     ```
-3.  **Deploy**:
+3.  **Deploy**: This will provision the Lambda function and its direct URL.
     ```bash
     cd infrastructure/terraform
     terraform apply
     ```
+    After successful deployment, Terraform will output the `lambda_function_url`. Copy this URL.
 
-### 2. Component Deployment
+### 2. Central Brain Deployment
 
-*   **`central-brain`**: This component is automatically built and deployed by the GitHub Actions workflow (`.github/workflows/central-brain.yaml`) whenever changes are pushed to the `main` branch. The workflow packages the Python code and deploys it to the AWS Lambda function created by Terraform.
+This component is automatically built and deployed by the GitHub Actions workflow (`.github/workflows/central-brain.yaml`) whenever changes are pushed to the `main` branch. The workflow packages the Python code and deploys it to the AWS Lambda function created by Terraform.
 
-*   **`edge-agent`**: The agent is designed to be run as a Docker container on the server you want to monitor. See the [Edge Agent README](edge-agent/README.md) for detailed deployment instructions.
+### 3. OpenTelemetry Collector Setup
+
+1.  **Update Collector Configuration**: Copy the `otel-collector-config.yaml` file from this repository to your collector's server. Update the `endpoint` in this file to the `lambda_function_url` obtained from Terraform deployment.
+2.  **Run Collector**: Start the OpenTelemetry Collector using Docker. Ensure you mount your log directories and pass your API key.
+    ```bash
+    docker run -d --rm \
+      -v $(pwd)/otel-collector-config.yaml:/etc/otel-collector-config.yaml \
+      -v /var/log:/var/log/ # Mount your log directory here (e.g., /home/user/app_logs:/var/log/)\
+      -e API_KEY="your_api_key_here" \
+      otel/opentelemetry-collector-contrib:latest \
+      --config /etc/otel-collector-config.yaml
+    ```
 
 ## Usage
 
-Once the infrastructure is up and the `edge-agent` is deployed, metrics will be collected every 5 minutes. The `central-brain` will analyze this data and send a Telegram message if the `up` metric for any monitored job is `0`.
+Once the infrastructure is up and the OpenTelemetry Collector is running, metrics and logs will be collected and sent to the `central-brain`. Anomaly detection will run on Gauge and Sum metrics, and alerts will be sent to Telegram.
 
 ## Future Work
 
-*   Refine and expand the anomaly detection models.
-*   Add more alerting channels (Email, Slack, PagerDuty).
-*   Develop a web-based UI for visualizing metrics and anomalies.
+*   **Resolve OTel Collector Filtering Issue**: Debug and correct the `transform` processor's `metric_statements` syntax in `otel-collector-config.yaml` to correctly filter metrics by type.
+*   **Verify Log Flow**: Once the collector configuration is fixed, verify that logs are successfully flowing from the collector to the Lambda and being stored in DynamoDB.
+*   **Traces Ingestion**: Implement traces ingestion.
+*   **Visualization Layer**: Begin building a web UI for data visualization.
 
 ---
 *This README was generated by Gemini.*

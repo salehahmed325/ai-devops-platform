@@ -12,47 +12,52 @@
 ## 2. Current Architecture & Status
 
 ### a. `edge-agent`
-- **Purpose**: A Dockerized Python (FastAPI) application that is deployed on a target server.
-- **Function**: It queries a Prometheus instance to collect metrics and forwards them to the `central-brain`.
-- **Status**: **WORKING & OPTIMIZED**. The agent is containerized, and its CI/CD pipeline is functional. (Note: Its role in metrics collection will be replaced by standard agents in the future).
+- **Purpose**: Originally a Dockerized Python (FastAPI) application for metrics collection.
+- **Status**: **DECOMMISSIONED**. Its role has been replaced by the OpenTelemetry Collector, a standard and more robust solution for data collection.
 
 ### b. `central-brain`
 - **Purpose**: A serverless AWS Lambda function that serves as the AI/ML core.
-- **Function**: It exposes an API Gateway endpoint to receive data, stores data in DynamoDB, and sends alerts via Telegram.
-- **Status**: **DEPLOYED & Receiving JSON Data**. The Lambda function is successfully receiving and parsing JSON data. Anomaly detection is temporarily disabled. **Current Issue**: Data is not being stored in DynamoDB, despite `batch.put_item` being called. The Lambda logs show "Successfully processed and stored 0 metric samples", which is misleading.
+- **Function**: Receives OTLP data, stores it in DynamoDB, performs anomaly detection, and sends alerts via Telegram.
+- **Current Status**:
+    - **Data Ingestion (Metrics):** **FULLY FUNCTIONAL**. Successfully receives OTLP Protobuf metrics via Lambda Function URL, decompresses gzip, parses Protobuf, and stores in DynamoDB. This is highly efficient and standard.
+    - **Data Ingestion (Logs):** **READY IN LAMBDA, PENDING COLLECTOR CONFIGURATION**. The Lambda function is updated to differentiate and parse OTLP Protobuf logs and store them in `ai-devops-platform-logs` DynamoDB table. Logs are not yet flowing due to collector configuration.
+    - **DynamoDB Storage:** Confirmed working for metrics. Log storage logic is implemented in Lambda.
+    - **Anomaly Detection:** Implemented using MAD (Median Absolute Deviation), confirmed working for metrics, and sending Telegram alerts.
+    - **Telegram Alerts:** Confirmed working.
 
 ### c. Infrastructure (Terraform)
 - **Provider**: AWS
 - **State Management**: Terraform state is stored remotely in an S3 bucket.
-- **Status**: **UPDATED FOR SERVERLESS & VPC REMOVED**. The infrastructure now provisions API Gateway, Lambda, and necessary IAM roles. VPC configuration has been removed.
+- **Status**: **UPDATED FOR SERVERLESS & LAMBDA FUNCTION URL**. Provisions Lambda, DynamoDB tables, and necessary IAM roles. API Gateway has been replaced by a direct Lambda Function URL.
 
 ### d. CI/CD
 - **Workflows**: Unified `central-brain.yaml` workflow for building and deploying the `central-brain` Lambda function.
-- **Status**: **FUNCTIONAL**. The pipeline is successfully deploying the Lambda function.
+- **Status**: **FUNCTIONAL**. Pipeline successfully deploys the Lambda function and passes secrets securely.
+
+### e. OpenTelemetry Collector Configuration (`otel-collector-config.yaml`)
+- **Purpose**: Collects metrics and logs from sources (e.g., Prometheus, filelog) and exports them to the `central-brain` Lambda.
+- **Current Status**:
+    - **Metrics Collection:** Configured to scrape Prometheus and send metrics.
+    - **Log Collection:** Configured to read from `/var/log/syslog` and send logs.
+    - **Filtering:** Intended to filter metrics to only send Gauges and Sums.
+    - **Current Issue**: **PERSISTENT CONFIGURATION ERROR**. The `transform` processor's `metric_statements` syntax for filtering by `metric.type_str` is causing an `invalid syntax: unexpected token "=="` error in the collector. This is preventing the collector from starting with the correct filtering and thus preventing logs from flowing.
 
 ## 3. How to Resume
 
-When you start our new session, paste the entire content of this file as your first message. Then, we can proceed with the following next steps.
+When you start our new session, paste the entire content of this file as your first message.
 
-## 4. Session Summary (2025-09-11)
+## 4. Session Summary (2025-09-14)
 
-Today, we debugged numerous issues with the `central-brain` Lambda function:
+Today, we made significant progress and encountered persistent challenges:
 
-1.  **Lambda Layer & VPC Removal**: Removed the `layer_build` job and VPC configuration from the CI/CD and Terraform, resolving deployment errors related to empty zip files and manual VPC deletions.
-2.  **Lambda Handler Fixes**:
-    *   Changed `async def handler` to `def handler` to resolve `Runtime.MarshalError`.
-    *   Fixed `lambda_zip_key` not being passed to the deploy job in CI/CD.
-    *   Resolved `NameError: name 'logger' is not defined` by moving logger initialization.
-    *   Fixed `Syntax error: keyword argument repeated: create_key` by removing `create_key` arguments from hardcoded protobuf definition.
-    *   Fixed `Runtime.HandlerNotFound` by re-inserting the `handler` function.
-3.  **API Key Debugging**: Resolved "Invalid or missing API Key" by simplifying the API key and ensuring it was correctly passed and recognized by the Lambda.
-4.  **Data Ingestion Pivot (Protobuf to JSON)**:
-    *   Encountered persistent `snappy` decompression issues (`cramjam.DecompressionError: snappy: corrupt input`) and `protobuf` parsing errors (`Error parsing message with type 'remote.WriteRequest'`).
-    *   Decided to pivot to JSON data ingestion to bypass these issues, modifying both `central-brain/src/main.py` and `generate_payload.py` to handle JSON.
-    *   Successfully verified JSON data reception and parsing in Lambda.
+1.  **Metrics Ingestion (OTLP Protobuf):** Successfully implemented end-to-end. The OpenTelemetry Collector sends gzipped Protobuf metrics via Lambda Function URL, which the Lambda correctly decompresses, parses, and stores.
+2.  **Anomaly Detection:** Implemented and confirmed working for metrics.
+3.  **Log Ingestion (Lambda Side):** The `central-brain` Lambda was updated to parse and store OTLP Protobuf logs.
+4.  **OpenTelemetry Collector Filtering Issue:** Repeated attempts to correctly configure the `transform` processor in `otel-collector-config.yaml` to filter metrics by type (`metric.type_str`) have failed due to persistent syntax errors in the OTTL expression. This is currently blocking the proper flow of logs and metric filtering.
 
 ## 5. Next Steps
 
-*   **Immediate Fix**: Debug why data is not being stored in DynamoDB by the `central-brain` Lambda function. This will involve further investigation into the `batch_writer` and `put_item` operations, and potentially checking DynamoDB permissions or table configuration.
-*   **Anomaly Detection**: Re-evaluate how to implement anomaly detection given Lambda size constraints (e.g., separate service, different ML approach).
-*   **Documentation**: Update other project documentation (`README.md`, `INSTALL.md`) to reflect the new architecture.
+*   **Immediate Fix**: Debug and correct the `transform` processor's `metric_statements` syntax in `otel-collector-config.yaml` to correctly filter metrics by type. This is the critical blocker.
+*   **Verify Log Flow**: Once the collector configuration is fixed, verify that logs are successfully flowing from the collector to the Lambda and being stored in DynamoDB.
+*   **Traces Ingestion**: After logs are flowing, implement traces ingestion.
+*   **Visualization Layer**: Begin building a web UI for data visualization.
