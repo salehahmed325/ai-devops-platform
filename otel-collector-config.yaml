@@ -1,0 +1,32 @@
+receivers:
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'prometheus'
+          scrape_interval: 10s
+          static_configs:
+            - targets: ['192.168.101.17:9090']
+
+exporters:
+  otlphttp:
+    endpoint: "https://6kyjm29wa6.execute-api.us-east-1.amazonaws.com/"
+    headers:
+      "x-api-key": "${API_KEY}" # API Key will be passed as an environment variable
+  
+  debug:
+    verbosity: detailed
+
+processors:
+  batch: {}
+  filter:
+    metrics:
+      include:
+        match_type: strict
+        metric_type: gauge
+
+service:
+  pipelines:
+    metrics:
+      receivers: [prometheus]
+      processors: [batch, filter]
+      exporters: [otlphttp, debug]

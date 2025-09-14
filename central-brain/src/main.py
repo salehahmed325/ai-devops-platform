@@ -270,7 +270,7 @@ def handler(event, context):
             if anomalies:
                 send_telegram_alert(anomalies)
 
-        return {"statusCode": 200, "body": "Success"}
+        return {"statusCode": 200, "body": "{}"}
 
     except Exception as e:
         logger.error(f"An unexpected error occurred: {e}", exc_info=True)
