@@ -199,6 +199,11 @@ def handler(event, context):
                     for metric in scope_metric.metrics:
                         metric_name = metric.name
                         metric_type = metric.WhichOneof("data")
+
+                        # Skip complex metric types we don't handle yet
+                        if metric_type not in ["gauge", "sum"]:
+                            continue
+                        
                         if not metric_type:
                             continue
                         
