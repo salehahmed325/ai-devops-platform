@@ -21,7 +21,8 @@ processors:
   transform:
     metric_statements:
       - context: metric
-        drop: "metric.type != METRIC_DATA_TYPE_GAUGE and metric.type != METRIC_DATA_TYPE_SUM"
+        statements:
+          - "keep_metrics(metric.type_str == \"Gauge\" or metric.type_str == \"Sum\")"
 
 service:
   pipelines:
