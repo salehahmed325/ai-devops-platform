@@ -1,5 +1,4 @@
 boto3
 boto3-stubs[dynamodb]
 httpx
-protobuf==6.32.0
-
+opentelemetry-proto

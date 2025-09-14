@@ -11,6 +11,10 @@ import statistics
 import boto3
 import httpx
 
+# OTLP Protobuf imports
+from opentelemetry.proto.collector.metrics.v1.metrics_service_pb2 import (
+    ExportMetricsServiceRequest,
+)
 
 # Import types for boto3 for better static analysis
 from mypy_boto3_dynamodb.service_resource import (
@@ -171,43 +175,45 @@ def handler(event, context):
             logger.warning("Request body is empty.")
             return {"statusCode": 400, "body": "Bad Request: Empty body"}
 
-        try:
-            parsed_json_body = json.loads(body)
-            logger.info(f"Received OTLP JSON body: {json.dumps(parsed_json_body, indent=2)}")
-        except json.JSONDecodeError as e:
-            logger.error(f"Error decoding JSON body: {e}")
-            return {"statusCode": 400, "body": "Bad Request: Invalid JSON body"}
+        if event.get("isBase64Encoded", False):
+            body = base64.b64decode(body)
+
+        metrics_request = ExportMetricsServiceRequest()
+        metrics_request.ParseFromString(body)
+        
+        logger.info(f"Successfully parsed OTLP Protobuf message.")
 
         # --- OTLP Data Transformation and Storage ---
         metrics_for_anomaly_detection: List[Metric] = []
         cluster_id = "unknown_cluster"
 
         with table.batch_writer() as batch:
-            for resource_metric in parsed_json_body.get("resourceMetrics", []):
-                for scope_metric in resource_metric.get("scopeMetrics", []):
-                    for metric in scope_metric.get("metrics", []):
-                        metric_name = metric.get("name")
-                        # The data points are nested under the metric type (e.g., 'gauge', 'sum')
-                        metric_type = next(iter(metric.keys() - {'name'}), None)
+            for resource_metric in metrics_request.resource_metrics:
+                for scope_metric in resource_metric.scope_metrics:
+                    for metric in scope_metric.metrics:
+                        metric_name = metric.name
+                        metric_type = metric.WhichOneof("data")
                         if not metric_type:
                             continue
+                        
+                        data = getattr(metric, metric_type)
 
-                        for data_point in metric.get(metric_type, {}).get("dataPoints", []):
+                        for data_point in data.data_points:
                             # Extract labels from attributes
-                            labels = {attr['key']: attr['value']['stringValue'] for attr in data_point.get("attributes", [])}
+                            labels = {attr.key: attr.value.string_value for attr in data_point.attributes}
                             labels["__name__"] = metric_name
 
                             if "cluster_id" in labels:
                                 cluster_id = labels["cluster_id"]
                             
                             # Extract timestamp and value
-                            timestamp_ns = int(data_point.get("timeUnixNano", 0))
+                            timestamp_ns = data_point.time_unix_nano
                             timestamp_sec = timestamp_ns / 1e9
                             
-                            value_key = next(iter(data_point.keys() - {'attributes', 'timeUnixNano', 'startTimeUnixNano'}), None)
+                            value_key = data_point.WhichOneof("value")
                             if not value_key:
                                 continue
-                            metric_value = data_point.get(value_key)
+                            metric_value = getattr(data_point, value_key)
 
                             # Create metric object for anomaly detection
                             metric_obj = Metric(
