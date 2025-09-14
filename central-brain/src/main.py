@@ -76,8 +76,8 @@ def convert_floats_to_decimals(obj):
         return [convert_floats_to_decimals(elem) for elem in obj]
     return obj
 
-def detect_anomalies_by_std_dev(
-    metrics: List[Metric], std_dev_threshold: int = 3
+def detect_anomalies(
+    metrics: List[Metric], threshold: float = 3.5
 ) -> List[Anomaly]:
     anomalies: List[Anomaly] = []
     
@@ -89,29 +89,34 @@ def detect_anomalies_by_std_dev(
             metrics_by_name[metric_name] = []
         metrics_by_name[metric_name].append(m)
 
-    # Calculate anomalies for each group
+    # Calculate anomalies for each group using Median Absolute Deviation (MAD)
     for metric_name, metric_group in metrics_by_name.items():
         values = [m.value[1] for m in metric_group]
         
-        if len(values) < 2:
-            continue # Not enough data to calculate std dev
+        if len(values) < 3: # Need at least 3 points for a meaningful MAD
+            continue
 
-        mean = statistics.mean(values)
-        std_dev = statistics.stdev(values)
+        median = statistics.median(values)
+        deviations = [abs(v - median) for v in values]
+        mad = statistics.median(deviations)
         
-        lower_bound = mean - (std_dev * std_dev_threshold)
-        upper_bound = mean + (std_dev * std_dev_threshold)
+        # If MAD is 0, all points are the same, so no anomalies
+        if mad == 0:
+            continue
 
         for m in metric_group:
             val = m.value[1]
-            if val < lower_bound or val > upper_bound:
+            # This is the Modified Z-score calculation
+            modified_z_score = 0.6745 * (val - median) / mad
+            
+            if abs(modified_z_score) > threshold:
                 anomaly = Anomaly(
                     metric_name=metric_name,
                     instance=m.metric.get("instance", "unknown"),
                     job=m.metric.get("job", "unknown"),
                     value=val,
                     timestamp=m.value[0],
-                    reason=f"Value {val:.2f} is outside the {std_dev_threshold}-sigma range ({lower_bound:.2f} - {upper_bound:.2f})",
+                    reason=f"Value {val:.2f} has a Modified Z-score of {modified_z_score:.2f}, which is above the threshold of {threshold}",
                 )
                 anomalies.append(anomaly)
                 logger.warning(f"Anomaly Detected: {anomaly}")
@@ -225,7 +230,7 @@ def handler(event, context):
 
         # --- Anomaly Detection and Alerting ---
         if metrics_for_anomaly_detection:
-            anomalies = detect_anomalies_by_std_dev(metrics_for_anomaly_detection)
+            anomalies = detect_anomalies(metrics_for_anomaly_detection)
             if anomalies:
                 send_telegram_alert(anomalies)
 
