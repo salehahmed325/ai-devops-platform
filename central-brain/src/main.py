@@ -103,7 +103,8 @@ def detect_anomalies(
 
     # Calculate anomalies for each group using Median Absolute Deviation (MAD)
     for metric_name, metric_group in metrics_by_name.items():
-        values = [m.value[1] for m in metric_group]
+        # The value is a list [timestamp, value], so we need index 1
+        values = [float(m.value[1]) for m in metric_group]
         
         if len(values) < 3: # Need at least 3 points for a meaningful MAD
             continue
@@ -117,9 +118,9 @@ def detect_anomalies(
             continue
 
         for m in metric_group:
-            val = m.value[1]
+            val = float(m.value[1])
             # This is the Modified Z-score calculation
-            modified_z_score = 0.6745 * (val - median) / mad
+            modified_z_score = 0.6745 * (val - median) / mad if mad else 0.0
             
             if abs(modified_z_score) > threshold:
                 anomaly = Anomaly(
@@ -166,6 +167,106 @@ def send_telegram_alert(anomalies: List[Anomaly]):
     except Exception as e:
         logger.error(f"An unexpected error occurred while sending Telegram alert: {e}")
 
+# --- New Helper Functions for Handler ---
+
+def _parse_otlp_metrics(metrics_request: ExportMetricsServiceRequest) -> List[Metric]:
+    """Parses an OTLP ExportMetricsServiceRequest into a list of Metric data classes."""
+    metrics_list = []
+    for resource_metric in metrics_request.resource_metrics:
+        for scope_metric in resource_metric.scope_metrics:
+            for metric_proto in scope_metric.metrics:
+                # Extract attributes from the resource level
+                attributes = {attr.key: attr.value.string_value for attr in resource_metric.resource.attributes}
+                job = attributes.get("service.name", "unknown_job")
+                instance = attributes.get("service.instance.id", "unknown_instance")
+
+                # Handle different metric types (Gauge and Sum are common)
+                data_points = []
+                if metric_proto.HasField("gauge"):
+                    data_points = metric_proto.gauge.data_points
+                elif metric_proto.HasField("sum"):
+                    data_points = metric_proto.sum.data_points
+
+                for dp in data_points:
+                    # Extract value (can be double or int)
+                    value = dp.as_double if dp.HasField("as_double") else dp.as_int
+                    # Timestamp is in nanoseconds, convert to seconds
+                    timestamp = dp.time_unix_nano / 1e9
+
+                    metric_dict = {
+                        "__name__": metric_proto.name,
+                        "job": job,
+                        "instance": instance,
+                    }
+                    # Add any other labels/attributes from the data point
+                    for attr in dp.attributes:
+                        metric_dict[attr.key] = attr.value.string_value
+
+                    metrics_list.append(
+                        Metric(metric=metric_dict, value=[timestamp, str(value)])
+                    )
+    logger.info(f"Parsed {len(metrics_list)} individual metric data points.")
+    return metrics_list
+
+def _store_metrics_in_dynamodb(metrics: List[Metric]):
+    """Stores a list of metrics in DynamoDB using a batch writer."""
+    if not metrics:
+        return
+
+    try:
+        with table.batch_writer() as batch:
+            for metric in metrics:
+                # Create a unique item for each metric data point
+                item_id = str(uuid.uuid4())
+                timestamp_iso = datetime.fromtimestamp(metric.value[0]).isoformat()
+                
+                item = {
+                    "id": item_id,
+                    "metric_name": metric.metric.get("__name__", "unknown"),
+                    "job": metric.metric.get("job", "unknown"),
+                    "instance": metric.metric.get("instance", "unknown"),
+                    "timestamp": timestamp_iso,
+                    "value": Decimal(str(metric.value[1])),
+                    "ttl": int(datetime.now().timestamp()) + (24 * 60 * 60 * 7),  # 7-day TTL
+                    "full_metric": convert_floats_to_decimals(metric.metric),
+                }
+                batch.put_item(Item=item)
+        logger.info(f"Successfully stored {len(metrics)} metrics in DynamoDB.")
+    except Exception as e:
+        logger.error(f"Error storing metrics in DynamoDB: {e}", exc_info=True)
+
+
+def _parse_and_store_logs_in_dynamodb(logs_request: ExportLogsServiceRequest):
+    """Parses an OTLP ExportLogsServiceRequest and stores logs in DynamoDB."""
+    log_count = 0
+    try:
+        with logs_table.batch_writer() as batch:
+            for resource_log in logs_request.resource_logs:
+                attributes = {attr.key: attr.value.string_value for attr in resource_log.resource.attributes}
+                job = attributes.get("service.name", "unknown_job")
+                instance = attributes.get("service.instance.id", "unknown_instance")
+
+                for scope_log in resource_log.scope_logs:
+                    for log_record in scope_log.log_records:
+                        log_count += 1
+                        item_id = str(uuid.uuid4())
+                        timestamp_iso = datetime.fromtimestamp(log_record.time_unix_nano / 1e9).isoformat()
+
+                        item = {
+                            "id": item_id,
+                            "job": job,
+                            "instance": instance,
+                            "timestamp": timestamp_iso,
+                            "severity": log_record.severity_text,
+                            "body": log_record.body.string_value,
+                            "attributes": {attr.key: attr.value.string_value for attr in log_record.attributes},
+                            "ttl": int(datetime.now().timestamp()) + (24 * 60 * 60 * 7),  # 7-day TTL
+                        }
+                        batch.put_item(Item=item)
+        logger.info(f"Successfully stored {log_count} logs in DynamoDB.")
+    except Exception as e:
+        logger.error(f"Error storing logs in DynamoDB: {e}", exc_info=True)
+
 
 # --- Main Lambda Handler ---
 def handler(event: Dict[str, Any], context: object) -> Dict[str, Any]:
@@ -211,24 +312,30 @@ def handler(event: Dict[str, Any], context: object) -> Dict[str, Any]:
         if "/v1/metrics" in path:
             metrics_request = ExportMetricsServiceRequest()
             metrics_request.ParseFromString(body_bytes)
-            # Here you would process the metrics, e.g., store them, run anomaly detection
             logger.info(f"Successfully parsed {len(metrics_request.resource_metrics)} metric resources.")
-            # Dummy processing for now
-            # In a real scenario, you'd call functions to store and analyze these metrics
+            
+            parsed_metrics = _parse_otlp_metrics(metrics_request)
+            _store_metrics_in_dynamodb(parsed_metrics)
+            
+            anomalies = detect_anomalies(parsed_metrics)
+            if anomalies:
+                send_telegram_alert(anomalies)
+
             return {
                 "statusCode": 200,
-                "body": json.dumps({"message": "Metrics received"}),
+                "body": json.dumps({"message": "Metrics received and processed"}),
             }
 
         elif "/v1/logs" in path:
             logs_request = ExportLogsServiceRequest()
             logs_request.ParseFromString(body_bytes)
-            # Here you would process the logs
             logger.info(f"Successfully parsed {len(logs_request.resource_logs)} log resources.")
-            # Dummy processing for now
+
+            _parse_and_store_logs_in_dynamodb(logs_request)
+
             return {
                 "statusCode": 200,
-                "body": json.dumps({"message": "Logs received"}),
+                "body": json.dumps({"message": "Logs received and processed"}),
             }
 
         else:
@@ -244,4 +351,3 @@ def handler(event: Dict[str, Any], context: object) -> Dict[str, Any]:
             "statusCode": 500,
             "body": json.dumps({"message": "Internal Server Error"}),
         }
-
