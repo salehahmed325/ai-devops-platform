@@ -288,7 +288,7 @@ def handler(event, context):
                 # Example: Sep 15 12:04:08 dev-local systemd-networkd[808]: veth1a7ffd7: Gained IPv6LL
                 log_pattern = re.compile(
                     r'^(?P<month>[A-Za-z]{3})\s+(?P<day>\d{1,2})\s+(?P<time>\d{2}:\d{2}:\d{2})\s+'
-                    r'(?P<hostname>\S+)\s+(?P<process>[^:]+):\s+(?P<message>.*)
+                    r'(?P<hostname>\S+)\s+(?P<process>[^:]+):\s+(?P<message>.*)'
                 )
                 match = log_pattern.match(raw_log_line)
 
