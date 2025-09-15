@@ -1,18 +1,21 @@
 # Central Brain
 
-The `central-brain` is the core backend service for the AI DevOps Platform. It is a Python FastAPI application responsible for ingesting, analyzing, and storing metrics, as well as sending alerts.
+The `central-brain` is the core backend service for the AI DevOps Platform. It is a Python FastAPI application responsible for ingesting, analyzing, and storing metrics, logs, and traces, as well as sending alerts.
 
 ## Features
 
-*   **Metric Ingestion**: Exposes a secure `/ingest` endpoint to receive metric payloads from `edge-agent`s.
-*   **Anomaly Detection**: Analyzes incoming metrics for anomalies. (Currently, it checks if the `up` metric is `0`).
-*   **Data Storage**: Stores all ingested metrics in an AWS DynamoDB table for historical analysis and model training.
-*   **Alerting**: Sends alerts via Telegram when anomalies are detected.
+*   **Metric Ingestion**: Exposes a secure endpoint to receive OTLP metric payloads. Metrics are filtered to include only Gauge and and Sum types.
+*   **Log Ingestion**: Exposes a secure endpoint to receive OTLP log payloads.
+*   **Trace Ingestion**: Exposes a secure endpoint to receive OTLP trace payloads.
+*   **Anomaly Detection**: Analyzes incoming metrics for anomalies using Median Absolute Deviation (MAD). Noise reduction is implemented by ignoring counter metrics.
+*   **Data Storage**: Stores all ingested metrics, logs, and traces in AWS DynamoDB tables for historical analysis and model training.
+*   **Alerting**: Sends clear, grouped alerts via Telegram when anomalies are detected.
 
 ## Future Goals
 
 To become a fully capable AIOps tool, the `central-brain` will be enhanced with the following capabilities:
 
+*   **Full Observability (Metrics, Logs, Traces)**: Ensure robust and comprehensive ingestion, processing, and storage of all three pillars of observability data.
 *   **Advanced Anomaly Detection**: Implement more sophisticated machine learning models to detect a wider range of anomalies in metrics, logs, and traces.
 *   **Alert Correlation and Noise Reduction**: Group related alerts, suppress duplicates, and identify the root cause of incidents to reduce alert fatigue.
 *   **Automated Remediation**: Develop a framework for defining and executing automated actions to remediate common issues (e.g., restarting a service, scaling a resource).
