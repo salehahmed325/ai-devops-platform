@@ -168,3 +168,80 @@ def send_telegram_alert(anomalies: List[Anomaly]):
 
 
 # --- Main Lambda Handler ---
+def handler(event: Dict[str, Any], context: object) -> Dict[str, Any]:
+    """
+    Main AWS Lambda handler for processing OTLP metrics and logs.
+    """
+    logger.debug(f"Received event: {json.dumps(event)}")
+
+    # API Key Authentication
+    api_key_header = event.get("headers", {}).get("x-api-key")
+    if not api_key_header or api_key_header != API_KEY:
+        logger.warning("Unauthorized access: Invalid or missing API Key.")
+        return {
+            "statusCode": 403,
+            "body": json.dumps({"message": "Forbidden: Invalid API Key"}),
+            "headers": {"Content-Type": "application/json"},
+        }
+
+    # Route based on path
+    path = event.get("rawPath", "")
+    body = event.get("body", "")
+    is_base64_encoded = event.get("isBase64Encoded", False)
+
+    if not body:
+        logger.warning("Received empty request body.")
+        return {
+            "statusCode": 400,
+            "body": json.dumps({"message": "Bad Request: Empty body"}),
+            "headers": {"Content-Type": "application/json"},
+        }
+
+    try:
+        # Decode body if it's base64 encoded
+        if is_base64_encoded:
+            body_bytes = base64.b64decode(body)
+        else:
+            body_bytes = body.encode("utf-8")
+
+        # Decompress if gzipped
+        if event.get("headers", {}).get("content-encoding") == "gzip":
+            body_bytes = gzip.decompress(body_bytes)
+
+        if "/v1/metrics" in path:
+            metrics_request = ExportMetricsServiceRequest()
+            metrics_request.ParseFromString(body_bytes)
+            # Here you would process the metrics, e.g., store them, run anomaly detection
+            logger.info(f"Successfully parsed {len(metrics_request.resource_metrics)} metric resources.")
+            # Dummy processing for now
+            # In a real scenario, you'd call functions to store and analyze these metrics
+            return {
+                "statusCode": 200,
+                "body": json.dumps({"message": "Metrics received"}),
+            }
+
+        elif "/v1/logs" in path:
+            logs_request = ExportLogsServiceRequest()
+            logs_request.ParseFromString(body_bytes)
+            # Here you would process the logs
+            logger.info(f"Successfully parsed {len(logs_request.resource_logs)} log resources.")
+            # Dummy processing for now
+            return {
+                "statusCode": 200,
+                "body": json.dumps({"message": "Logs received"}),
+            }
+
+        else:
+            logger.warning(f"Unhandled path: {path}")
+            return {
+                "statusCode": 404,
+                "body": json.dumps({"message": "Not Found"}),
+            }
+
+    except Exception as e:
+        logger.error(f"Error processing request: {e}", exc_info=True)
+        return {
+            "statusCode": 500,
+            "body": json.dumps({"message": "Internal Server Error"}),
+        }
+
