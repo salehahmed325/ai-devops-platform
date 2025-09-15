@@ -103,6 +103,11 @@ def detect_anomalies(
 
     # Calculate anomalies for each group using Median Absolute Deviation (MAD)
     for metric_name, metric_group in metrics_by_name.items():
+        # --- NEW: Ignore counter metrics which always increase ---
+        if metric_name.endswith("_total"):
+            logger.info(f"Skipping anomaly detection for counter metric: {metric_name}")
+            continue
+
         # The value is a list [timestamp, value], so we need index 1
         values = [float(m.value[1]) for m in metric_group]
         
@@ -141,15 +146,32 @@ def send_telegram_alert(anomalies: List[Anomaly]):
         logger.warning("Telegram bot token or chat ID is not configured. Skipping alert.")
         return
 
-    message = "🚨 *Anomaly Alert* 🚨\n\n"
-    for anomaly in anomalies:
-        message += (
-            f"Metric: `{anomaly.metric_name}`\n"
-            f"Instance: `{anomaly.instance}`\n"
-            f"Value: `{anomaly.value:.2f}`\n"
-            f"Reason: _{anomaly.reason}_\n\n"
-        )
+    # --- NEW: Group anomalies by metric name for a cleaner message ---
+    anomalies_by_metric: Dict[str, List[Anomaly]] = {}
+    for anom in anomalies:
+        if anom.metric_name not in anomalies_by_metric:
+            anomalies_by_metric[anom.metric_name] = []
+        anomalies_by_metric[anom.metric_name].append(anom)
+
+    message = "🚨 *AIOps Anomaly Alert* 🚨\n\n"
     
+    for metric_name, anomaly_group in anomalies_by_metric.items():
+        # --- NEW: More readable format ---
+        message += f"📈 *Metric:* `{metric_name}`\n"
+        message += "Abnormal behavior detected across one or more instances:\n\n"
+        
+        for anomaly in anomaly_group:
+            # Convert timestamp to readable format
+            timestamp_str = datetime.fromtimestamp(anomaly.timestamp).strftime('%Y-%m-%d %H:%M:%S UTC')
+            message += (
+                f"  - *Instance:* `{anomaly.instance}`\n"
+                f"  - *Detected Value:* `{anomaly.value:.2f}`\n"
+                f"  - *When:* {timestamp_str}\n"
+            )
+        
+        message += "\n*Explanation:* Values for this metric are significantly different from the recent norm.\n\n"
+        message += "---\n\n"
+
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,
         "text": message,
