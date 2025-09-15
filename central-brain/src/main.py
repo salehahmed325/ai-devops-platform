@@ -23,6 +23,9 @@ from opentelemetry.proto.collector.metrics.v1.metrics_service_pb2 import (
 from opentelemetry.proto.collector.logs.v1.logs_service_pb2 import (
     ExportLogsServiceRequest,
 )
+from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import (
+    ExportTraceServiceRequest,
+)
 
 # Import types for boto3 for better static analysis
 from mypy_boto3_dynamodb.service_resource import (
@@ -40,6 +43,9 @@ DYNAMODB_TABLE_NAME = os.getenv("DYNAMODB_TABLE_NAME", "ai-devops-platform-data"
 DYNAMODB_LOGS_TABLE_NAME = os.getenv(
     "DYNAMODB_LOGS_TABLE_NAME", "ai-devops-platform-logs"
 )
+DYNAMODB_TRACES_TABLE_NAME = os.getenv(
+    "DYNAMODB_TRACES_TABLE_NAME", "ai-devops-platform-traces"
+)
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_API_URL = (
     f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -55,6 +61,7 @@ logger.info(f"Lambda API Key: {API_KEY}")
 dynamodb: DynamoDBServiceResource = boto3.resource("dynamodb")
 table: Table = dynamodb.Table(DYNAMODB_TABLE_NAME)
 logs_table: Table = dynamodb.Table(DYNAMODB_LOGS_TABLE_NAME)
+traces_table: Table = dynamodb.Table(DYNAMODB_TRACES_TABLE_NAME)
 alert_configs_table: Table = dynamodb.Table(
     os.getenv(
         "DYNAMODB_ALERT_CONFIGS_TABLE_NAME", "ai-devops-platform-alert-configs"
@@ -301,6 +308,52 @@ def _parse_and_store_logs_in_dynamodb(logs_request: ExportLogsServiceRequest):
     except Exception as e:
         logger.error(f"Error storing logs in DynamoDB: {e}", exc_info=True)
 
+def _parse_and_store_traces_in_dynamodb(traces_request: ExportTraceServiceRequest):
+    """Parses an OTLP ExportTraceServiceRequest and stores traces in DynamoDB."""
+    span_count = 0
+    try:
+        with traces_table.batch_writer() as batch:
+            for resource_span in traces_request.resource_spans:
+                resource_attributes = {attr.key: attr.value.string_value for attr in resource_span.resource.attributes}
+                service_name = resource_attributes.get("service.name", "unknown_service")
+
+                for scope_span in resource_span.scope_spans:
+                    for span in scope_span.spans:
+                        span_count += 1
+                        
+                        # OTLP IDs are byte arrays, convert to hex strings for storage
+                        trace_id = span.trace_id.hex()
+                        span_id = span.span_id.hex()
+                        parent_span_id = span.parent_span_id.hex() if span.parent_span_id else ""
+
+                        item = {
+                            "trace_id": trace_id,
+                            "span_id": span_id,
+                            "parent_span_id": parent_span_id,
+                            "service_name": service_name,
+                            "span_name": span.name,
+                            "span_kind": span.kind,
+                            "start_time_unix_nano": Decimal(span.start_time_unix_nano),
+                            "end_time_unix_nano": Decimal(span.end_time_unix_nano),
+                            "duration_nano": Decimal(span.end_time_unix_nano - span.start_time_unix_nano),
+                            "status_code": span.status.code,
+                            "status_message": span.status.message,
+                            "attributes": {attr.key: attr.value.string_value for attr in span.attributes},
+                            "events": [
+                                {
+                                    "name": event.name,
+                                    "timestamp": Decimal(event.time_unix_nano),
+                                    "attributes": {attr.key: attr.value.string_value for attr in event.attributes},
+                                }
+                                for event in span.events
+                            ],
+                            "ttl": int(datetime.now().timestamp()) + (24 * 60 * 60 * 7),  # 7-day TTL
+                        }
+                        batch.put_item(Item=item)
+        logger.info(f"Successfully stored {span_count} spans in DynamoDB.")
+    except Exception as e:
+        logger.error(f"Error storing traces in DynamoDB: {e}", exc_info=True)
+
 
 # --- Main Lambda Handler ---
 def handler(event: Dict[str, Any], context: object) -> Dict[str, Any]:
@@ -370,6 +423,18 @@ def handler(event: Dict[str, Any], context: object) -> Dict[str, Any]:
             return {
                 "statusCode": 200,
                 "body": json.dumps({"message": "Logs received and processed"}),
+            }
+
+        elif "/v1/traces" in path:
+            traces_request = ExportTraceServiceRequest()
+            traces_request.ParseFromString(body_bytes)
+            logger.info(f"Successfully parsed {len(traces_request.resource_spans)} trace resources.")
+
+            _parse_and_store_traces_in_dynamodb(traces_request)
+
+            return {
+                "statusCode": 200,
+                "body": json.dumps({"message": "Traces received and processed"}),
             }
 
         else:
