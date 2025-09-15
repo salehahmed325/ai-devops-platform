@@ -8,6 +8,8 @@ from dataclasses import dataclass
 import json
 import statistics
 import uuid
+import re
+from datetime import datetime
 
 import boto3
 import httpx
@@ -276,46 +278,96 @@ def handler(event, context):
                     send_telegram_alert(anomalies)
 
         except Exception as e:
-            # Try parsing as Logs if Metrics parsing failed
+            # --- NEW LOG PARSING BRANCH ---
+            # Try parsing as raw syslog log if Metrics parsing failed
             try:
-                logs_request = ExportLogsServiceRequest()
-                logs_request.ParseFromString(body)
-                logger.info(f"Successfully parsed OTLP Protobuf logs message.")
+                # Assuming the body is a raw string at this point
+                raw_log_line = body.decode('utf-8') if isinstance(body, bytes) else body
 
-                # --- OTLP Logs Transformation and Storage ---
-                log_samples_processed = 0
-                with logs_table.batch_writer() as batch:
-                    for resource_log in logs_request.resource_logs:
-                        for scope_log in resource_log.scope_logs:
-                            for log_record in scope_log.log_records:
-                                timestamp_ns = log_record.time_unix_nano
-                                timestamp_sec = timestamp_ns / 1e9
-                                
-                                log_body = log_record.body.string_value
-                                severity_text = log_record.severity_text
-
-                                # Extract attributes (labels) from log record
-                                attributes = {attr.key: attr.value.string_value for attr in log_record.attributes}
-
-                                # Create a unique ID for the log entry
-                                log_id = str(uuid.uuid4())
-
-                                item = {
-                                    "log_id": log_id,
-                                    "timestamp": Decimal(str(timestamp_sec)),
-                                    "body": log_body,
-                                    "severity_text": severity_text,
-                                    "attributes": convert_floats_to_decimals(attributes),
-                                }
-                                batch.put_item(Item=item)
-                                log_samples_processed += 1
-
-                logger.info(
-                    (
-                        f"Successfully processed and stored "
-                        f"{log_samples_processed} log samples."
-                    )
+                # Regex to parse syslog-like format
+                # Example: Sep 15 12:04:08 dev-local systemd-networkd[808]: veth1a7ffd7: Gained IPv6LL
+                log_pattern = re.compile(
+                    r'^(?P<month>[A-Za-z]{3})\s+(?P<day>\d{1,2})\s+(?P<time>\d{2}:\d{2}:\d{2})\s+'
+                    r'(?P<hostname>\S+)\s+(?P<process>[^:]+):\s+(?P<message>.*)
                 )
+                match = log_pattern.match(raw_log_line)
+
+                if match:
+                    parsed_data = match.groupdict()
+
+                    # Construct timestamp
+                    # Need to get the current year for the timestamp
+                    current_year = datetime.now().year
+                    timestamp_str = f"{parsed_data['month']} {parsed_data['day']} {current_year} {parsed_data['time']}"
+                    # Convert to Unix timestamp (seconds since epoch)
+                    timestamp_obj = datetime.strptime(timestamp_str, '%b %d %Y %H:%M:%S')
+                    timestamp_sec = timestamp_obj.timestamp()
+
+                    # Determine severity (simplified for now, can be enhanced)
+                    # For syslog, severity is often part of the process or inferred
+                    severity_text = "INFO" # Default, can be improved with more complex parsing
+
+                    log_body = parsed_data['message']
+                    attributes = {
+                        "hostname": parsed_data['hostname'],
+                        "process": parsed_data['process'],
+                        # Add other parsed fields as attributes
+                    }
+
+                    # Create a unique ID for the log entry
+                    log_id = str(uuid.uuid4())
+
+                    item = {
+                        "log_id": log_id,
+                        "timestamp": Decimal(str(timestamp_sec)),
+                        "body": log_body,
+                        "severity_text": severity_text,
+                        "attributes": convert_floats_to_decimals(attributes),
+                    }
+                    logs_table.put_item(Item=item) # Use put_item directly for single log, or batch_writer for multiple
+
+                    logger.info(f"Successfully parsed and stored raw log: {log_body}")
+
+                else:
+                    logger.warning(f"Raw log line did not match expected pattern: {raw_log_line}")
+                    # If it's not a raw log, try parsing as OTLP Logs
+                    logs_request = ExportLogsServiceRequest()
+                    logs_request.ParseFromString(body)
+                    logger.info(f"Successfully parsed OTLP Protobuf logs message.")
+                    # --- OTLP Logs Transformation and Storage ---
+                    log_samples_processed = 0
+                    with logs_table.batch_writer() as batch:
+                        for resource_log in logs_request.resource_logs:
+                            for scope_log in resource_log.scope_logs:
+                                for log_record in scope_log.log_records:
+                                    timestamp_ns = log_record.time_unix_nano
+                                    timestamp_sec = timestamp_ns / 1e9
+
+                                    log_body = log_record.body.string_value
+                                    severity_text = log_record.severity_text
+
+                                    # Extract attributes (labels) from log record
+                                    attributes = {attr.key: attr.value.string_value for attr in log_record.attributes}
+
+                                    # Create a unique ID for the log entry
+                                    log_id = str(uuid.uuid4())
+
+                                    item = {
+                                        "log_id": log_id,
+                                        "timestamp": Decimal(str(timestamp_sec)),
+                                        "body": log_body,
+                                        "severity_text": severity_text,
+                                        "attributes": convert_floats_to_decimals(attributes),
+                                    }
+                                    batch.put_item(Item=item)
+                                    log_samples_processed += 1
+
+                    logger.info(
+                        (
+                            f"Successfully processed and stored "
+                            f"{log_samples_processed} log samples."
+                        )
+                    )
 
             except Exception as log_e:
                 logger.error(f"Failed to parse as Metrics or Logs: {e}, {log_e}", exc_info=True)

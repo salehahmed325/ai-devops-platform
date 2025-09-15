@@ -15,18 +15,25 @@ exporters:
     endpoint: "https://2i5jbul6bajunwmqxtqjcwmbfu0ockfz.lambda-url.us-east-1.on.aws/"
     headers:
       "x-api-key": "${API_KEY}" # API Key will be passed as an environment variable
-  
+
   debug:
     verbosity: detailed
 
 processors:
   batch: {}
+
   filter:
     metrics:
+      # Exclude unwanted metrics
       exclude:
         match_type: regexp
         metric_names:
-          - ".*_total$"
+          - '.*_total$'   # exclude Prometheus counters
+      # Include only specific Gauge/Sum metrics
+      include:
+        match_type: regexp
+        metric_names:
+          - 'metric1|metric2|metric3'   # replace with your actual gauge/sum metric names
 
 service:
   pipelines:
@@ -34,6 +41,7 @@ service:
       receivers: [prometheus]
       processors: [batch, filter]
       exporters: [otlphttp, debug]
+
     logs:
       receivers: [filelog]
       processors: [batch]
