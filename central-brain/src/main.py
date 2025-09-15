@@ -237,17 +237,18 @@ def _store_metrics_in_dynamodb(metrics: List[Metric]):
 
     try:
         with table.batch_writer() as batch:
-            for metric in metrics:
+            # --- FIX: Enumerate to create a unique index for each metric in the batch ---
+            for i, metric in enumerate(metrics):
                 metric_name = metric.metric.get("__name__", "unknown")
                 job = metric.metric.get("job", "unknown")
                 instance = metric.metric.get("instance", "unknown")
                 timestamp = metric.value[0]
 
-                # --- FIX: Match the table schema ---
                 # Get cluster_id from metric attributes, default to job name
                 cluster_id = metric.metric.get("cluster.id", job)
-                # Create a unique identifier for the metric as the sort key
-                metric_identifier = f"{metric_name}#{instance}#{timestamp}"
+                
+                # --- FIX: Add index to the identifier to guarantee uniqueness ---
+                metric_identifier = f"{metric_name}#{instance}#{timestamp}#{i}"
 
                 item = {
                     "cluster_id": cluster_id,
@@ -257,7 +258,7 @@ def _store_metrics_in_dynamodb(metrics: List[Metric]):
                     "instance": instance,
                     "timestamp": Decimal(str(timestamp)),
                     "value": Decimal(str(metric.value[1])),
-                    "ttl": int(datetime.now().timestamp()) + (24 * 60 * 60 * 7),  # 7-day TTL
+                    "ttl": int(datetime.now().timestamp()) + (24 * 60 * 60 * 7),
                     "full_metric": convert_floats_to_decimals(metric.metric),
                 }
                 batch.put_item(Item=item)
