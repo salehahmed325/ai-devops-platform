@@ -238,16 +238,24 @@ def _store_metrics_in_dynamodb(metrics: List[Metric]):
     try:
         with table.batch_writer() as batch:
             for metric in metrics:
-                # Create a unique item for each metric data point
-                item_id = str(uuid.uuid4())
-                timestamp_iso = datetime.fromtimestamp(metric.value[0]).isoformat()
-                
+                metric_name = metric.metric.get("__name__", "unknown")
+                job = metric.metric.get("job", "unknown")
+                instance = metric.metric.get("instance", "unknown")
+                timestamp = metric.value[0]
+
+                # --- FIX: Match the table schema ---
+                # Get cluster_id from metric attributes, default to job name
+                cluster_id = metric.metric.get("cluster.id", job)
+                # Create a unique identifier for the metric as the sort key
+                metric_identifier = f"{metric_name}#{instance}#{timestamp}"
+
                 item = {
-                    "id": item_id,
-                    "metric_name": metric.metric.get("__name__", "unknown"),
-                    "job": metric.metric.get("job", "unknown"),
-                    "instance": metric.metric.get("instance", "unknown"),
-                    "timestamp": timestamp_iso,
+                    "cluster_id": cluster_id,
+                    "metric_identifier": metric_identifier,
+                    "metric_name": metric_name,
+                    "job": job,
+                    "instance": instance,
+                    "timestamp": Decimal(str(timestamp)),
                     "value": Decimal(str(metric.value[1])),
                     "ttl": int(datetime.now().timestamp()) + (24 * 60 * 60 * 7),  # 7-day TTL
                     "full_metric": convert_floats_to_decimals(metric.metric),
@@ -265,22 +273,21 @@ def _parse_and_store_logs_in_dynamodb(logs_request: ExportLogsServiceRequest):
         with logs_table.batch_writer() as batch:
             for resource_log in logs_request.resource_logs:
                 attributes = {attr.key: attr.value.string_value for attr in resource_log.resource.attributes}
-                # --- FIX: Get cluster_id, default to job name if not present ---
                 cluster_id = attributes.get("cluster.id", attributes.get("service.name", "unknown_cluster"))
                 job = attributes.get("service.name", "unknown_job")
                 instance = attributes.get("service.instance.id", "unknown_instance")
 
                 for scope_log in resource_log.scope_logs:
-                    for log_record in scope_log.log_records:
+                    # --- FIX: Enumerate to create a unique index for each log in the batch ---
+                    for i, log_record in enumerate(scope_log.log_records):
                         log_count += 1
-                        # --- FIX: Use numeric timestamp for range key ---
-                        timestamp_sec = log_record.time_unix_nano / 1e9
                         
+                        # --- FIX: Add index to nanosecond timestamp to guarantee uniqueness ---
+                        unique_timestamp = log_record.time_unix_nano + i
+
                         item = {
-                            # --- FIX: Add required hash_key 'cluster_id' ---
                             "cluster_id": cluster_id,
-                            # --- FIX: Use numeric timestamp for range_key 'timestamp' ---
-                            "timestamp": Decimal(str(timestamp_sec)),
+                            "timestamp": Decimal(unique_timestamp),
                             "job": job,
                             "instance": instance,
                             "severity": log_record.severity_text,
