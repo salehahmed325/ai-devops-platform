@@ -243,20 +243,24 @@ def _parse_and_store_logs_in_dynamodb(logs_request: ExportLogsServiceRequest):
         with logs_table.batch_writer() as batch:
             for resource_log in logs_request.resource_logs:
                 attributes = {attr.key: attr.value.string_value for attr in resource_log.resource.attributes}
+                # --- FIX: Get cluster_id, default to job name if not present ---
+                cluster_id = attributes.get("cluster.id", attributes.get("service.name", "unknown_cluster"))
                 job = attributes.get("service.name", "unknown_job")
                 instance = attributes.get("service.instance.id", "unknown_instance")
 
                 for scope_log in resource_log.scope_logs:
                     for log_record in scope_log.log_records:
                         log_count += 1
-                        item_id = str(uuid.uuid4())
-                        timestamp_iso = datetime.fromtimestamp(log_record.time_unix_nano / 1e9).isoformat()
-
+                        # --- FIX: Use numeric timestamp for range key ---
+                        timestamp_sec = log_record.time_unix_nano / 1e9
+                        
                         item = {
-                            "id": item_id,
+                            # --- FIX: Add required hash_key 'cluster_id' ---
+                            "cluster_id": cluster_id,
+                            # --- FIX: Use numeric timestamp for range_key 'timestamp' ---
+                            "timestamp": Decimal(str(timestamp_sec)),
                             "job": job,
                             "instance": instance,
-                            "timestamp": timestamp_iso,
                             "severity": log_record.severity_text,
                             "body": log_record.body.string_value,
                             "attributes": {attr.key: attr.value.string_value for attr in log_record.attributes},
