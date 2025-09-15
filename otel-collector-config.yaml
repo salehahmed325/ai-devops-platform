@@ -21,19 +21,12 @@ exporters:
 
 processors:
   batch: {}
-
   filter:
     metrics:
-      # Exclude unwanted metrics
-      exclude:
-        match_type: regexp
-        metric_names:
-          - '.*_total$'   # exclude Prometheus counters
-      # Include only specific Gauge/Sum metrics
-      include:
-        match_type: regexp
-        metric_names:
-          - 'metric1|metric2|metric3'   # replace with your actual gauge/sum metric names
+      metric:
+        - 'type == "Histogram"'
+        - 'type == "ExponentialHistogram"'
+        - 'type == "Summary"'
 
 service:
   pipelines:
