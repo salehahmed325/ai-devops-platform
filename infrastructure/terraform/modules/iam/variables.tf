@@ -38,6 +38,12 @@ variable "dynamodb_logs_table_arn" {
   type        = string
 }
 
+variable "dynamodb_traces_table_arn" {
+  description = "ARN of the DynamoDB table for traces storage"
+  type        = string
+  default     = ""
+}
+
 variable "tags" {
   description = "Additional tags"
   type        = map(string)

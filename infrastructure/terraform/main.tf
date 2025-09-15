@@ -24,6 +24,7 @@ module "iam" {
   dynamodb_table_arn       = module.dynamodb_data.table_arn # Pass the ARN for data table
   dynamodb_alert_table_arn = aws_dynamodb_table.alert_configs.arn # Pass the ARN for alert configs table
   dynamodb_logs_table_arn  = module.dynamodb_data.logs_table_arn # Pass the ARN for logs table
+  dynamodb_traces_table_arn = module.dynamodb_data.traces_table_arn # Pass the ARN for traces table
   tags                     = local.common_tags
 }
 
@@ -96,6 +97,7 @@ module "lambda_central_brain" {
     TELEGRAM_CHAT_ID                  = var.telegram_chat_id
     DYNAMODB_TABLE_NAME               = module.dynamodb_data.table_name
     DYNAMODB_LOGS_TABLE_NAME          = module.dynamodb_data.logs_table_name
+    DYNAMODB_TRACES_TABLE_NAME        = module.dynamodb_data.traces_table_name
     DYNAMODB_ALERT_CONFIGS_TABLE_NAME = aws_dynamodb_table.alert_configs.name
   }
 }

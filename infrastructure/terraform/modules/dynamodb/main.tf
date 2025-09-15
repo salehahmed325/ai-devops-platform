@@ -58,6 +58,32 @@ resource "aws_dynamodb_table" "logs" {
   tags = var.tags
 }
 
+resource "aws_dynamodb_table" "traces" {
+  name         = "ai-devops-platform-traces"
+  billing_mode = "PAY_PER_REQUEST"
+
+  hash_key  = "trace_id"
+  range_key = "span_id"
+
+  attribute {
+    name = "trace_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "span_id"
+    type = "S"
+  }
+
+  # Enable TTL on the 'ttl' attribute
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  tags = var.tags
+}
+
 output "table_name" {
   description = "The name of the DynamoDB table"
   value       = aws_dynamodb_table.main.name
@@ -76,4 +102,14 @@ output "logs_table_name" {
 output "logs_table_arn" {
   description = "The ARN of the DynamoDB logs table"
   value       = aws_dynamodb_table.logs.arn
+}
+
+output "traces_table_name" {
+  description = "The name of the DynamoDB traces table"
+  value       = aws_dynamodb_table.traces.name
+}
+
+output "traces_table_arn" {
+  description = "The ARN of the DynamoDB traces table"
+  value       = aws_dynamodb_table.traces.arn
 }
