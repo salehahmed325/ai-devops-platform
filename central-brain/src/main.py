@@ -282,7 +282,11 @@ def handler(event, context):
             # Try parsing as raw syslog log if Metrics parsing failed
             try:
                 # Assuming the body is a raw string at this point
-                raw_log_line = body.decode('utf-8') if isinstance(body, bytes) else body
+                try:
+                    raw_log_line = body.decode('utf-8') if isinstance(body, bytes) else body
+                except UnicodeDecodeError:
+                    logger.warning("UnicodeDecodeError: Attempting to decode with 'latin-1' encoding.")
+                    raw_log_line = body.decode('latin-1') if isinstance(body, bytes) else body
 
                 # Regex to parse syslog-like format
                 # Example: Sep 15 12:04:08 dev-local systemd-networkd[808]: veth1a7ffd7: Gained IPv6LL
