@@ -9,6 +9,10 @@ receivers:
   filelog:
     include:
       - /var/log/syslog
+  otlp:
+    protocols:
+      grpc:
+      http:
 
 exporters:
   otlphttp:
@@ -37,5 +41,9 @@ service:
 
     logs:
       receivers: [filelog]
+      processors: [batch]
+      exporters: [otlphttp, debug]
+    traces:
+      receivers: [otlp]
       processors: [batch]
       exporters: [otlphttp, debug]
