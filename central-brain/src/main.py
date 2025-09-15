@@ -286,13 +286,18 @@ def handler(event, context):
                 log_samples_processed = 0
                 with logs_table.batch_writer() as batch:
                     for resource_log in logs_request.resource_logs:
+                        cluster_id = "unknown_cluster" # Default value
+                        for attr in resource_log.resource.attributes:
+                            if attr.key == "cluster_id":
+                                cluster_id = attr.value.string_value
+                                break
                         for scope_log in resource_log.scope_logs:
                             for log_record in scope_log.log_records:
                                 timestamp_ns = log_record.time_unix_nano
                                 timestamp_sec = timestamp_ns / 1e9
 
                                 log_body = log_record.body.string_value
-                                severity_text = str(log_record.severity_text) # Changed to string_value
+                                severity_text = str(log_record.severity_text)
 
                                 # Extract attributes (labels) from log record
                                 attributes = {attr.key: attr.value.string_value for attr in log_record.attributes}
@@ -301,6 +306,7 @@ def handler(event, context):
                                 log_id = str(uuid.uuid4())
 
                                 item = {
+                                    "cluster_id": cluster_id,
                                     "log_id": log_id,
                                     "timestamp": Decimal(str(timestamp_sec)),
                                     "body": log_body,
