@@ -377,13 +377,7 @@ def handler(event: Dict[str, Any], context: object) -> Dict[str, Any]:
     body = event.get("body", "")
     is_base64_encoded = event.get("isBase64Encoded", False)
 
-    if not body:
-        logger.warning("Received empty request body.")
-        return {
-            "statusCode": 400,
-            "body": json.dumps({"message": "Bad Request: Empty body"}),
-            "headers": {"Content-Type": "application/json"},
-        }
+    
 
     try:
         # Decode body if it's base64 encoded
@@ -397,6 +391,13 @@ def handler(event: Dict[str, Any], context: object) -> Dict[str, Any]:
             body_bytes = gzip.decompress(body_bytes)
 
         if "/v1/metrics" in path:
+            if not body: # Add this check
+                logger.warning("Received empty request body for /v1/metrics.")
+                return {
+                    "statusCode": 400,
+                    "body": json.dumps({"message": "Bad Request: Empty body for metrics"}),
+                    "headers": {"Content-Type": "application/json"},
+                }
             metrics_request = ExportMetricsServiceRequest()
             metrics_request.ParseFromString(body_bytes)
             logger.info(f"Successfully parsed {len(metrics_request.resource_metrics)} metric resources.")
@@ -414,6 +415,13 @@ def handler(event: Dict[str, Any], context: object) -> Dict[str, Any]:
             }
 
         elif "/v1/logs" in path:
+            if not body: # Add this check
+                logger.warning("Received empty request body for /v1/logs.")
+                return {
+                    "statusCode": 400,
+                    "body": json.dumps({"message": "Bad Request: Empty body for logs"}),
+                    "headers": {"Content-Type": "application/json"},
+                }
             logs_request = ExportLogsServiceRequest()
             logs_request.ParseFromString(body_bytes)
             logger.info(f"Successfully parsed {len(logs_request.resource_logs)} log resources.")
@@ -426,6 +434,13 @@ def handler(event: Dict[str, Any], context: object) -> Dict[str, Any]:
             }
 
         elif "/v1/traces" in path:
+            if not body: # Add this check
+                logger.warning("Received empty request body for /v1/traces.")
+                return {
+                    "statusCode": 400,
+                    "body": json.dumps({"message": "Bad Request: Empty body for traces"}),
+                    "headers": {"Content-Type": "application/json"},
+                }
             traces_request = ExportTraceServiceRequest()
             traces_request.ParseFromString(body_bytes)
             logger.info(f"Successfully parsed {len(traces_request.resource_spans)} trace resources.")
