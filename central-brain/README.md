@@ -50,4 +50,4 @@ The `central-brain` is designed for automated, zero-touch deployment.
 There are no manual deployment steps required for this component under normal operation.
 
 updated at 06:18PM on 08/09/2025
-testing ci/cd.
+testing ci/cd
