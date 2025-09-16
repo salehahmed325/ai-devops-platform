@@ -79,7 +79,8 @@ resource "aws_iam_policy" "ai_devops_policy" {
         Action = [
           "dynamodb:PutItem",
           "dynamodb:BatchWriteItem",
-          "dynamodb:Query"
+          "dynamodb:Query",
+          "dynamodb:Scan"
         ]
         Resource = [
           var.dynamodb_table_arn,
