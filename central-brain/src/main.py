@@ -437,6 +437,32 @@ def handler(event: Dict[str, Any], context: object) -> Dict[str, Any]:
                 "body": json.dumps({"message": "Traces received and processed"}),
             }
 
+        elif "/data" in path and event.get("requestContext", {}).get("http", {}).get("method") == "GET":
+            logger.info("Received GET request for /data. Scanning DynamoDB for metrics.")
+            try:
+                # Perform a simple scan on the metrics table
+                response = table.scan(Limit=10) # Limit to 10 items for a quick test
+                items = response.get("Items", [])
+
+                # Convert Decimal types to float for JSON serialization
+                for item in items:
+                    for key, value in item.items():
+                        if isinstance(value, Decimal):
+                            item[key] = float(value)
+
+                return {
+                    "statusCode": 200,
+                    "body": json.dumps({"message": "Data retrieved successfully", "data": items}),
+                    "headers": {"Content-Type": "application/json"},
+                }
+            except Exception as e:
+                logger.error(f"Error scanning DynamoDB for /data: {e}", exc_info=True)
+                return {
+                    "statusCode": 500,
+                    "body": json.dumps({"message": "Internal Server Error during data retrieval"}),
+                    "headers": {"Content-Type": "application/json"},
+                }
+
         else:
             logger.warning(f"Unhandled path: {path}")
             return {
