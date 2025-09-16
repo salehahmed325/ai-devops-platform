@@ -19,10 +19,11 @@
 - **Purpose**: A serverless AWS Lambda function that serves as the AI/ML core.
 - **Function**: Receives OTLP data, stores it in DynamoDB, performs anomaly detection, and sends alerts via Telegram.
 - **Current Status**:
-    - **Data Ingestion (Metrics):** **FULLY FUNCTIONAL**. Successfully receives OTLP Protobuf metrics via Lambda Function URL, decompresses gzip, parses Protobuf, and stores in DynamoDB. Metrics are filtered by type (only Gauge and Sum) by the collector.
-    - **Data Ingestion (Logs):** **FULLY FUNCTIONAL**. Logs are successfully flowing from the collector and stored in `ai-devops-platform-logs` DynamoDB table.
-    - **Traces Ingestion:** Lambda is ready to receive and store OTLP traces. Infrastructure (DynamoDB table, IAM permissions) is provisioned. Collector is configured to receive and export traces. **PENDING TRACE SOURCE APPLICATION.**
+    - **Data Ingestion (Metrics/Logs/Traces):** **FULLY FUNCTIONAL**. Successfully receives OTLP Protobuf metrics, logs, and traces via Lambda Function URL. Decompresses gzip, parses Protobuf, and stores in DynamoDB. Body presence checks are now correctly implemented within specific ingestion paths.
+    - **Query Endpoint (`/data`):** **FULLY FUNCTIONAL**. Implemented a `/data` endpoint that responds to `GET` requests, queries the `ai-devops-platform-data` DynamoDB table, and returns aggregated metrics data. Handles `Decimal` serialization for JSON output.
+    - **API Key Authentication:** **FULLY FUNCTIONAL**. Lambda performs API key validation via the `x-api-key` header.
     - **DynamoDB Storage:** **FULLY FUNCTIONAL** for metrics, logs, and traces. All data is stored in their respective DynamoDB tables (`ai-devops-platform-data`, `ai-devops-platform-logs`, `ai-devops-platform-traces`) with correct schema and unique keys.
+    - **DynamoDB Access Permissions:** **FULLY FUNCTIONAL**. Lambda's IAM role now includes `dynamodb:Scan` permissions on `ai-devops-platform-data` table.
     - **Anomaly Detection:** Implemented using MAD (Median Absolute Deviation), confirmed working for metrics, and sending Telegram alerts. Noise reduction implemented by ignoring counter metrics. Telegram alerts are now more readable and grouped.
     - **Telegram Alerts:** Confirmed working.
 
@@ -41,6 +42,11 @@
     - **Metrics Collection:** Configured to scrape Prometheus and send metrics. Metrics filtering is now correctly implemented using the `filter` processor to send only Gauge and Sum types.
     - **Log Collection:** Configured to read from `/var/log/syslog` and send logs.
     - **Traces Collection:** OTLP receiver for traces is configured, and a traces pipeline is active.
+
+### f. Visualization Layer
+- **Status**: **INITIAL SETUP COMPLETE**. Next.js application scaffolded. Basic dashboard page created. Data fetching from `central-brain` `/data` endpoint implemented and successfully displaying metrics data in a table.
+- **Technology**: Next.js (React), Tailwind CSS.
+- **Current Display**: Displays metrics data in a basic table format.
 
 ## 3. How to Resume
 
@@ -64,9 +70,29 @@ Today, we made significant progress in building out the core observability capab
     *   Successfully debugged and implemented correct metric filtering (Gauge and Sum only) using the `filter` processor.
     *   Configured trace reception and export.
 
-## 5. Next Steps
+## 5. Session Summary (2025-09-16)
 
-*   **Immediate Fix**: Debug and correct the `transform` processor's `metric_statements` syntax in `otel-collector-config.yaml` to correctly filter metrics by type. This is the critical blocker.
-*   **Verify Log Flow**: Once the collector configuration is fixed, verify that logs are successfully flowing from the collector to the Lambda and being stored in DynamoDB.
-*   **Traces Ingestion**: After logs are flowing, implement traces ingestion.
-*   **Visualization Layer**: Begin building a web UI for data visualization.
+Today, we focused on building the initial visualization layer and debugging the data flow:
+
+1.  **Next.js Frontend Setup**:
+    *   Scaffolded a new Next.js application (`ui` directory) with TypeScript, Tailwind CSS, and App Router.
+    *   Created a basic dashboard page (`src/app/dashboard/page.tsx`).
+    *   Resolved a hydration mismatch error by adding `suppressHydrationWarning` to `layout.tsx`.
+2.  **Central Brain Lambda Enhancements**:
+    *   Implemented a new `/data` endpoint in `central-brain/src/main.py` to serve aggregated metrics data from DynamoDB.
+    *   Corrected `Decimal` serialization for JSON output in the `/data` endpoint to resolve Pylance errors.
+    *   Refactored body presence checks in the Lambda handler to correctly differentiate between OTLP ingestion (expecting body) and `/data` query (no body).
+3.  **Data Flow Debugging & Resolution**:
+    *   **CORS Issue (403)**: Confirmed permissive CORS configuration in Terraform and successful CI/CD application.
+    *   **API Key Authentication (403)**: Identified and resolved the issue where the Lambda function was not receiving the correct `x-api-key` header from the frontend. Verified Lambda's `API_KEY` environment variable and ensured frontend sends the correct header.
+    *   **Empty Request Body (400)**: Resolved by implementing the `/data` query endpoint in the Lambda and updating the frontend to call it.
+    *   **DynamoDB Access (AccessDeniedException)**: Granted `dynamodb:Scan` permissions to the Lambda's IAM role via Terraform.
+4.  **Successful Data Display**: The Next.js dashboard now successfully fetches and displays metrics data from the `central-brain` Lambda in a formatted table.
+
+## 6. Next Steps
+
+*   **Visualization Layer Enhancements**:
+    *   Implement filtering and search for metrics (by `metric_name`, `job`, `instance`, time range).
+    *   Integrate charting libraries for time-series visualization of metrics.
+    *   Extend Lambda query capabilities and frontend to fetch and display logs and traces.
+*   **Traces Ingestion**: (Deferred for now, but remains a future task).
