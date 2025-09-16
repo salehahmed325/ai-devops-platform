@@ -460,14 +460,20 @@ def handler(event: Dict[str, Any], context: object) -> Dict[str, Any]:
                 items = response.get("Items", [])
 
                 # Convert Decimal types to float for JSON serialization
+                # Create a new list of items with Decimal converted to float for JSON serialization
+                serializable_items = []
                 for item in items:
+                    serializable_item = {}
                     for key, value in item.items():
                         if isinstance(value, Decimal):
-                            item[key] = float(value)
+                            serializable_item[key] = float(value)
+                        else:
+                            serializable_item[key] = value
+                    serializable_items.append(serializable_item)
 
                 return {
                     "statusCode": 200,
-                    "body": json.dumps({"message": "Data retrieved successfully", "data": items}),
+                    "body": json.dumps({"message": "Data retrieved successfully", "data": serializable_items}),
                     "headers": {"Content-Type": "application/json"},
                 }
             except Exception as e:
